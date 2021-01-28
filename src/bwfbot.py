@@ -1,12 +1,13 @@
 import telebot
 import time
 
+from user import User
+from exercise import Exercise
+from workout import Workout
+
 # configuration
 TOKEN = "1595750252:AAGXPcRE-4TkdtV8YKpG1CRyQwYNjghzA4c"
 bot = telebot.TeleBot(TOKEN)
-
-workouts = ["Push ups", "Dips", "Rows", "Squats"]
-reps = {}
 
 current_workout_index = 0
 chat_id = None
@@ -20,20 +21,53 @@ number_pad = telebot.types.ReplyKeyboardMarkup(
 )
 number_pad.add(*[str(x) for x in range(1,16)])
 
+def generate_inline_keyboard_markup():
+	markup = telebot.types.InlineKeyboardMarkup()
+	markup.add(telebot.types.InlineKeyboardButton("Start one of my workouts", callback_data="start")
+	markup.add(telebot.types.InlineKeyboardButton("Create a new workout", callback_data="create"))
+	markup.add(telebot.types.InlineKeyboardButton("Explore the community", callback_data="explore"),)
+	return markup
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_query(call):
+	bot.answer_callback_query(call.id, "Okay!")
+
 # handle /start command
 @bot.message_handler(commands=["start"])
 def start(message):
-	global chat_id
-	global user_first_name
 
-	chat_id = message.chat.id
-	message_ids.append(message.id)
-	user_first_name = message.from_user.first_name
-	reply_message = f"Alright, {user_first_name}, lets begin!"
-	reply = bot.reply_to(message, reply_message)
-	message_ids.append(reply.id)
+	user = None # TODO: user = get_user_from_id(message.from_user.id)
+	is_new_user = False
+	if not user:
+		# new account. create new user profile
+		is_new_user = True
+		new_user = User(message.from_user.id, message.from_user.first_name, message.from_user.last_name)
+		user = new_user
 
-	do_workout(current_workout_index)
+	welcome_text = f'''{"Welcome" if is_new_user else "Welcome back"}, {user.first_name}. What would you like to do today?
+	\n
+	If you want, you can click /commands to get a comprehensive view of all possible commands you can give me'''
+
+	start_options_keyboard = telebot.types.InlineKeyboardMarkup()
+	start_options_keyboard.add("Test1, Test2, Test3")
+
+	bot.reply_to(message, welcome_text, reply_markup=generate_inline_keyboard_markup())
+	
+
+
+
+	# --------------------- previous stuff -----------------------
+	# global chat_id
+	# global user_first_name
+
+	# chat_id = message.chat.id
+	# message_ids.append(message.id)
+	# user_first_name = message.from_user.first_name
+	# reply_message = f"Alright, {user_first_name}, lets begin!"
+	# reply = bot.reply_to(message, reply_message)
+	# message_ids.append(reply.id)
+
+	# do_workout(current_workout_index)
 	
 
 def do_workout(index):
