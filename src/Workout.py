@@ -6,7 +6,7 @@ as well as a list of exercises.
 
 
 class Workout:
-	def __init__(self, title, created_by):
+	def __init__(self, title="", created_by=""):
 		self.title = title
 		self.created_by = created_by
 		self.length = 0

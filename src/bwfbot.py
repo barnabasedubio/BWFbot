@@ -11,17 +11,17 @@ with open("../token.txt", "r", encoding="utf8") as fp:
 
 # global variables
 BOT = telebot.TeleBot(TOKEN)
-USER = None
+USER = User()
 CHAT_ID = None
 MESSAGE_IDS = []
 
 WAITING_FOR_INPUT = False
 
-WAITING_FOR_WORKOUT_TITLE = False
+WORKOUT = Workout()
 WORKOUT_TITLE = ""
-WORKOUT = Workout(None, None)
-EXERCISE = None
+WAITING_FOR_WORKOUT_TITLE = False
 
+EXERCISE = Exercise()
 WAITING_FOR_EXERCISE_NAME = False
 WAITING_FOR_EXERCISE_VIDEO_LINK = False
 WAITING_FOR_MUSCLES_WORKED = False
@@ -33,9 +33,15 @@ WAITING_FOR_SETUP_DONE = False
 
 def add_exercise_markup():
 	markup = telebot.types.InlineKeyboardMarkup()
-	markup.add(
-		telebot.types.InlineKeyboardButton("Add Exercise", callback_data="add_exercise")
-	)
+	markup.add(telebot.types.InlineKeyboardButton("Add exercise", callback_data="add_exercise"))
+	return markup
+
+
+def add_another_exercise_markup():
+	markup = telebot.types.InlineKeyboardMarkup()
+	markup.add(telebot.types.InlineKeyboardButton("Add another exercise", callback_data="add_exercise"))
+	markup.add(telebot.types.InlineKeyboardButton("Start workout", callback_data="start_workout"))
+	markup.add(telebot.types.InlineKeyboardButton("Go to main menu", callback_data="start_menu"))
 	return markup
 
 
@@ -60,7 +66,7 @@ def create_workout_answer_markup():
 def list_workouts_markup(workout_titles):
 	markup = telebot.types.InlineKeyboardMarkup()
 	for workout_title in workout_titles:
-		markup.add(telebot.types.InlineKeyboardButton(workout_title, callback_data=workout_title))
+		markup.add(telebot.types.InlineKeyboardButton(workout_title, callback_data=f"START_WORKOUT:{workout_title}"))
 	return markup
 
 
@@ -77,7 +83,7 @@ def number_pad_markup():
 
 def start_options_markup():
 	markup = telebot.types.InlineKeyboardMarkup()
-	markup.add(telebot.types.InlineKeyboardButton("Start one of my workouts", callback_data="start_workout"))
+	markup.add(telebot.types.InlineKeyboardButton("Start one of my workouts", callback_data="choose_workouts"))
 	markup.add(telebot.types.InlineKeyboardButton("Create a new workout", callback_data="create_workout"))
 	markup.add(telebot.types.InlineKeyboardButton("Explore the community", callback_data="explore_community"))
 	markup.add(telebot.types.InlineKeyboardButton("Something else", callback_data="display_commands"))
@@ -89,30 +95,31 @@ def start_options_markup():
 
 # handle /start command
 @BOT.message_handler(commands=["start"])
-def start(message):
+def initialize(message):
 	global USER
 	global CHAT_ID
 
 	CHAT_ID = message.chat.id
-	# TODO: user = get_user_from_id(message.from_user.id)
+	# TODO: USER = get_user_from_id(message.from_user.id)
 	is_new_user = False
-	if not USER:
+	if not USER.id:
 		# new account. create new user profile
 		is_new_user = True
-		new_user = User(message.from_user.id, message.from_user.first_name, message.from_user.last_name)
-		USER = new_user
+		USER = User(message.from_user.id, message.from_user.first_name, message.from_user.last_name)
+	show_start_options(is_new_user)
 
+
+def show_start_options(is_new_user=False):
 	welcome_text = f'''\n\n{"Welcome" if is_new_user else "Welcome back"}, {USER.first_name}. What would you like to do today?
-	\n
-	Click /commands to get a comprehensive view of all possible commands you can give me.'''
+		\n
+		Click /commands to get a comprehensive view of all possible commands you can give me.'''
+	BOT.send_message(CHAT_ID, welcome_text, reply_markup=start_options_markup())
 
-	BOT.reply_to(message, welcome_text, reply_markup=start_options_markup())
-	
 
 @BOT.callback_query_handler(func=lambda call: True)
 def handle_callback_query(call):
-	if call.data == "start_workout":
-		handle_start_workout(call)
+	if call.data == "choose_workouts":
+		choose_workout(call)
 
 	elif call.data == "create_workout":
 		get_workout_title()
@@ -128,6 +135,15 @@ def handle_callback_query(call):
 
 	elif call.data == "display_commands":
 		handle_commands_request(call)
+
+	elif call.data == "start_menu":
+		show_start_options()
+
+	elif call.data.startswith("START_WORKOUT:"):
+		workout_title = call.data.replate("START_WORKOUT:", "")
+		start_workout(workout_title)
+
+
 
 
 # handle /next command
@@ -177,7 +193,7 @@ def handle_user_input(message):
 # ----------------- FUNCTIONS ------------------
 
 
-def handle_start_workout(call):
+def choose_workout(call):
 	# check if user has any saved workouts
 	if USER.created_workouts:
 		# display a list of all stored user workouts
@@ -234,6 +250,8 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 	:param skip_setting
 	:return:
 	"""
+
+	# TODO refactor this function!! Different methods for each action ( e.g add_exercise_yt_link(), etc )
 
 	global EXERCISE
 
@@ -293,21 +311,24 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 				Muscles worked: {EXERCISE.muscles_worked if EXERCISE.muscles_worked else "empty"}\n\n
 				Target rep range: {EXERCISE.target_rep_range if EXERCISE.target_rep_range else "empty"}\n
 			'''
-			# if user.created_workouts is only 1, add automatically
-			# else
-			# add {name} to {last workout in user.created_workouts} ?
-			# yes -> add
-			# choose another workout -> display list of workout to add
+
 			BOT.send_message(CHAT_ID, message_text)
-
-			if len(USER.created_workouts) == 1:
-				USER.created_workouts[0].exercises.append(EXERCISE)
-				BOT.send_message(CHAT_ID, "Added exercise to workout!")
-
-			else:
-				pass
-
+			BOT.send_message(CHAT_ID, f"Added {EXERCISE.name} to {USER.created_workouts[-1].title}!")
 			WAITING_FOR_INPUT = False
+
+			# 3 inline button options:
+			# add another
+			# begin workout
+			# go back
+
+			BOT.send_message(CHAT_ID, "Would you like to add another exercise?", reply_markup=add_another_exercise_markup())
+
+
+def start_workout(workout_title):
+	workout = filter(lambda w: w.title == workout_title, USER.created_workouts)
+	BOT.send_message(CHAT_ID, "Let's go!")
+	# create a list of exercises. Whenever the user has completed the sets for that exercise, pop the exercise of list
+
 
 def handle_explore_community(call):
 	pass
