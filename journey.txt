@@ -1,0 +1,8 @@
+How I created a semi-scalable, stateful, telegram bot application
+
+* unlike regular web applications where state is handled in the server
+* or SPAs where the state is handled in the browser (vuex)
+* telegram bots are completely stateless
+
+question: How can I build a fitness tracking application on telegram that can handle a bunch of users?
+solution: by creating my own state and state management system
