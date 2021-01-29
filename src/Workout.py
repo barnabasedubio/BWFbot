@@ -4,10 +4,12 @@ The workout class contains meta information about a particular workout
 as well as a list of exercises.
 """
 
+
 class Workout:
-	def __init__(self, created_by, length=0, difficulty="easy"):
+	def __init__(self, title, created_by):
+		self.title = title
 		self.created_by = created_by
-		self.length = length
-		self.difficulty = difficulty
+		self.length = 0
 		self.running = False
 		self.saves = 0
+		self.exercises = []
