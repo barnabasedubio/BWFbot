@@ -13,3 +13,18 @@ class Workout:
 		self.running = False
 		self.saves = 0
 		self.exercises = []
+		self.started = False
+
+	def __str__(self):
+		title_string = f"\nTitle: {self.title}"
+		created_by_string = f"\nCreated By: {self.created_by}"
+		length_string = f"\nLength: ~ {self.length} minutes"
+		exercises_string = f"\nExercises: {self.exercises}"
+		return f"{title_string}{created_by_string}{length_string}{exercises_string}"
+
+	def display_summary(self):
+		summary = ""
+		for exercise in self.exercises:
+			summary += f"You did {sum(exercise.reps)} {exercise.name}!"
+		summary += "\n"
+		return summary

@@ -1,5 +1,4 @@
 import telebot
-import time
 
 from user import User
 from exercise import Exercise
@@ -18,6 +17,7 @@ MESSAGE_IDS = []
 WAITING_FOR_INPUT = False
 
 WORKOUT = Workout()
+WORKOUT_INDEX = 0
 WORKOUT_TITLE = ""
 WAITING_FOR_WORKOUT_TITLE = False
 
@@ -28,8 +28,12 @@ WAITING_FOR_MUSCLES_WORKED = False
 WAITING_FOR_REP_RANGE = False
 WAITING_FOR_SETUP_DONE = False
 
+WAITING_FOR_REP_COUNT = False
+CURRENT_EXERCISE_INDEX = 0
+
 
 # ----------------- MARKUPS --------------------
+
 
 def add_exercise_markup():
 	markup = telebot.types.InlineKeyboardMarkup()
@@ -40,7 +44,7 @@ def add_exercise_markup():
 def add_another_exercise_markup():
 	markup = telebot.types.InlineKeyboardMarkup()
 	markup.add(telebot.types.InlineKeyboardButton("Add another exercise", callback_data="add_exercise"))
-	markup.add(telebot.types.InlineKeyboardButton("Start workout", callback_data="start_workout"))
+	markup.add(telebot.types.InlineKeyboardButton("Start workout", callback_data="choose_workouts"))
 	markup.add(telebot.types.InlineKeyboardButton("Go to main menu", callback_data="start_menu"))
 	return markup
 
@@ -118,11 +122,17 @@ def show_start_options(is_new_user=False):
 
 @BOT.callback_query_handler(func=lambda call: True)
 def handle_callback_query(call):
+	"""
+	handles all inline keyboard responses
+	:param call
+	"""
+	global WORKOUT_TITLE
+
 	if call.data == "choose_workouts":
 		choose_workout(call)
 
 	elif call.data == "create_workout":
-		get_workout_title()
+		get_workout_title_from_input()
 
 	elif call.data == "add_exercise":
 		add_exercise()
@@ -140,33 +150,55 @@ def handle_callback_query(call):
 		show_start_options()
 
 	elif call.data.startswith("START_WORKOUT:"):
-		workout_title = call.data.replate("START_WORKOUT:", "")
-		start_workout(workout_title)
-
-
+		workout_title = call.data.replace("START_WORKOUT:", "")
+		WORKOUT_TITLE = workout_title
+		BOT.send_message(CHAT_ID, "Let's go!")
+		do_workout()
 
 
 # handle /next command
 @BOT.message_handler(commands=["next"])
 def proceed_to_next(message):
+	"""
+	advances the chat conversation based on context
+	the context is derived from the global variables
+	since only one of them can be true at a time (in addition to WAITING_FOR_USER_INPUT), the chat flow
+	can be handled fairly straightforwardly
+	:param message
+	"""
+	global CURRENT_EXERCISE_INDEX
+
 	if WAITING_FOR_EXERCISE_VIDEO_LINK:
+		# user skipped the video link entry
 		add_exercise(message, "EXERCISE_VIDEO_LINK", True)
 
 	elif WAITING_FOR_MUSCLES_WORKED:
+		# user skipped the muscles worked entry
 		add_exercise(message, "EXERCISE_MUSCLES_WORKED", True)
+
+	elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX != len(WORKOUT.exercises) - 1:
+		# display the next exercise in the workout to the user
+		# if the user is on their last exercise, this logic is handled by the /done handler instead
+		CURRENT_EXERCISE_INDEX += 1
+		do_workout()
 
 
 # handle /done command
 @BOT.message_handler(commands=["done"])
 def finish(message):
+	global WAITING_FOR_INPUT, WAITING_FOR_REP_COUNT
+
 	if WAITING_FOR_REP_RANGE:
+		# user skipped the target rep range entry
 		add_exercise(message, "EXERCISE_TARGET_REP_RANGE", True)
-
-
-# handle rep messages
-@BOT.message_handler(func=lambda message: message.text.isnumeric())
-def handle_rep(message):
-	pass  # TODO: add rep to exercise
+	if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.exercises) - 1:
+		# user is done with their workout. End workout and add it to their completed workouts
+		WORKOUT.started = False
+		USER.completed_workouts.append(WORKOUT)
+		# deactivate user input handling
+		WAITING_FOR_REP_COUNT = False
+		WAITING_FOR_INPUT = False
+		workout_completed()
 
 
 # handle clear request
@@ -178,8 +210,16 @@ def clear_dialog(message):
 # only if bot is expecting user input
 @BOT.message_handler(func=lambda message: message.text and WAITING_FOR_INPUT)
 def handle_user_input(message):
+	"""
+	handles actual user input written to chat.
+	similar to func proceed_to_next(), the context is derived from the global variables
+	:param message:
+	:return:
+	"""
+	# create workout
 	if WAITING_FOR_WORKOUT_TITLE:
-		get_workout_title(message)
+		get_workout_title_from_input(message)
+	# create exercise
 	elif WAITING_FOR_EXERCISE_NAME:
 		add_exercise(message, "EXERCISE_NAME")
 	elif WAITING_FOR_EXERCISE_VIDEO_LINK:
@@ -188,8 +228,15 @@ def handle_user_input(message):
 		add_exercise(message, "EXERCISE_MUSCLES_WORKED")
 	elif WAITING_FOR_REP_RANGE:
 		add_exercise(message, "EXERCISE_TARGET_REP_RANGE")
+	# add reps to exercise
+	elif WAITING_FOR_REP_COUNT:
+		if message.text.isnumeric():
+			do_workout(True, message)
 
 
+@BOT.message_handler(content_types=["contact"])
+def handle_contact(message):
+	print(message.contact.phone_number)
 # ----------------- FUNCTIONS ------------------
 
 
@@ -209,14 +256,14 @@ def choose_workout(call):
 		BOT.send_message(CHAT_ID, message_text, reply_markup=create_workout_answer_markup())
 
 
-def get_workout_title(message=None):
+def get_workout_title_from_input(message=None):
 	"""
 	This function gets called twice. Once upon creating a new workout, and once after the
 	user has typed in the workout name. The initial call has no message value, thus the first
 	condition gets executed. After user input has been handled by handle_workout_title()
 	and this function gets called again, it enters the else block, with the received
 	message from the input handler.
-	This method allows the bot to imitate waiting for user input.
+
 	:param message:
 	:return:
 	"""
@@ -235,6 +282,13 @@ def get_workout_title(message=None):
 
 
 def set_workout(message):
+	"""
+
+	:param message:
+	:return:
+	"""
+	global USER
+
 	workout_title = message.text
 	new_workout = Workout(workout_title, message.from_user.id)
 	USER.created_workouts.append(new_workout)
@@ -251,18 +305,16 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 	:return:
 	"""
 
-	# TODO refactor this function!! Different methods for each action ( e.g add_exercise_yt_link(), etc )
+	global \
+		EXERCISE, \
+		WAITING_FOR_INPUT
 
-	global EXERCISE
-
-	# global flag that allows the bot to listen to user input
-	global WAITING_FOR_INPUT
-	# global flags that direct the conversation. Only one of them should be True at a time!
-	global WAITING_FOR_EXERCISE_NAME, \
+	# flags that direct the conversation. Only one of them should be True at a time!
+	global \
+		WAITING_FOR_EXERCISE_NAME, \
 		WAITING_FOR_EXERCISE_VIDEO_LINK, \
 		WAITING_FOR_MUSCLES_WORKED, \
-		WAITING_FOR_REP_RANGE, \
-		WAITING_FOR_SETUP_DONE
+		WAITING_FOR_REP_RANGE
 
 	WAITING_FOR_INPUT = True
 
@@ -304,30 +356,62 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 				EXERCISE.target_rep_range = rep_range
 
 			# done. Add workout to users workouts.
-			message_text = f'''
-				\n\nExercise summary:\n
-				Name: {EXERCISE.name}\n\n
-				Video: {EXERCISE.video_link if EXERCISE.video_link else "empty"}\n\n
-				Muscles worked: {EXERCISE.muscles_worked if EXERCISE.muscles_worked else "empty"}\n\n
-				Target rep range: {EXERCISE.target_rep_range if EXERCISE.target_rep_range else "empty"}\n
-			'''
-
+			message_text = f"Exercise summary: {str(EXERCISE)}"
 			BOT.send_message(CHAT_ID, message_text)
+			USER.created_workouts[-1].exercises.append(EXERCISE)
 			BOT.send_message(CHAT_ID, f"Added {EXERCISE.name} to {USER.created_workouts[-1].title}!")
 			WAITING_FOR_INPUT = False
-
-			# 3 inline button options:
-			# add another
-			# begin workout
-			# go back
 
 			BOT.send_message(CHAT_ID, "Would you like to add another exercise?", reply_markup=add_another_exercise_markup())
 
 
-def start_workout(workout_title):
-	workout = filter(lambda w: w.title == workout_title, USER.created_workouts)
-	BOT.send_message(CHAT_ID, "Let's go!")
-	# create a list of exercises. Whenever the user has completed the sets for that exercise, pop the exercise of list
+def do_workout(new_rep_entry=False, message=None):
+	"""
+
+	:param new_rep_entry:
+	:param message:
+	:return:
+	"""
+	global \
+		WORKOUT, \
+		WAITING_FOR_REP_COUNT, \
+		WAITING_FOR_INPUT
+
+	if not WORKOUT.started:
+		# only happens once (when the workout gets started initially)
+		WORKOUT = [w for w in USER.created_workouts if w.title == WORKOUT_TITLE][0]
+		WORKOUT.started = True
+
+	# create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
+	exercises_in_workout = WORKOUT.exercises
+	current_exercise = exercises_in_workout[CURRENT_EXERCISE_INDEX]
+
+	if not new_rep_entry:
+		if current_exercise == WORKOUT.exercises[-1]:
+			# user is performing the last exercise. Instead of /next, display /done
+			message_text = f"Your last exercise are {current_exercise.name}! After each set, send me the amount of reps. Once completed, click /done to finish your workout."
+
+		else:
+			# the user is beginning the exercise. Show the exercise info
+			message_text = f"Time for {current_exercise.name}! After each set, send me the amount of reps. Once you are done with the exercise, click /next."
+
+		BOT.send_message(CHAT_ID, message_text, reply_markup=number_pad_markup())
+
+		WAITING_FOR_REP_COUNT = True
+		WAITING_FOR_INPUT = True
+
+	else:
+		rep_count = int(message.text)
+		WORKOUT.exercises[CURRENT_EXERCISE_INDEX].reps.append(rep_count)
+		print(WORKOUT.exercises[CURRENT_EXERCISE_INDEX].reps)
+
+
+def workout_completed():
+	global CURRENT_EXERCISE_INDEX
+
+	CURRENT_EXERCISE_INDEX = 0  # reset
+	message_text = f"Congratulations, you're done! {WORKOUT.display_summary()}"
+	BOT.send_message(CHAT_ID, message_text)
 
 
 def handle_explore_community(call):
@@ -346,10 +430,6 @@ def handle_commands_request(call):
 	# display a chat saying 'What can I help you with?' Followed by the list of possible commands.
 	BOT.send_message(CHAT_ID, "What can I help you with?")
 	BOT.send_message(CHAT_ID, "commands list is currently being worked on.")
-	pass
-
-
-def do_workout(index):
 	pass
 
 
