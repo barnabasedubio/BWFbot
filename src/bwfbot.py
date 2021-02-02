@@ -28,7 +28,6 @@ EXERCISE = Exercise()
 WAITING_FOR_EXERCISE_NAME = False
 WAITING_FOR_EXERCISE_VIDEO_LINK = False
 WAITING_FOR_MUSCLES_WORKED = False
-WAITING_FOR_REP_RANGE = False
 WAITING_FOR_SETUP_DONE = False
 
 WAITING_FOR_REP_COUNT = False
@@ -141,7 +140,7 @@ def handle_callback_query(call):
 		choose_workout(call)
 
 	elif call.data == "create_workout":
-		get_workout_title_from_input()
+		get_workout_title_from_input(call)
 
 	elif call.data == "add_exercise":
 		add_exercise()
@@ -204,11 +203,7 @@ def finish(message):
 
 	MESSAGES.append(message)
 
-	if WAITING_FOR_REP_RANGE:
-		# user skipped the target rep range entry
-		add_exercise(message, "EXERCISE_TARGET_REP_RANGE", True)
-
-	elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.exercises) - 1:
+	if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.exercises) - 1:
 		# user is done with their workout. End workout and add it to their completed workouts
 		WORKOUT.started = False
 		USER.completed_workouts.append(WORKOUT)
@@ -253,7 +248,7 @@ def handle_user_input(message):
 	if WAITING_FOR_INPUT:
 		# create workout
 		if WAITING_FOR_WORKOUT_TITLE:
-			get_workout_title_from_input(message)
+			get_workout_title_from_input(message=message)
 		# create exercise
 		elif WAITING_FOR_EXERCISE_NAME:
 			add_exercise(message, "EXERCISE_NAME")
@@ -261,8 +256,6 @@ def handle_user_input(message):
 			add_exercise(message, "EXERCISE_VIDEO_LINK")
 		elif WAITING_FOR_MUSCLES_WORKED:
 			add_exercise(message, "EXERCISE_MUSCLES_WORKED")
-		elif WAITING_FOR_REP_RANGE:
-			add_exercise(message, "EXERCISE_TARGET_REP_RANGE")
 		# add reps to exercise
 		elif WAITING_FOR_REP_COUNT:
 			if message.text.isnumeric():
@@ -318,7 +311,7 @@ def choose_workout(call):
 			reply_markup=create_workout_answer_markup())
 
 
-def get_workout_title_from_input(message=None):
+def get_workout_title_from_input(call=None, message=None):
 	"""
 	This function gets called twice. Once upon creating a new workout, and once after the
 	user has typed in the workout name. The initial call has no message value, thus the first
@@ -331,9 +324,9 @@ def get_workout_title_from_input(message=None):
 	"""
 	global WAITING_FOR_INPUT, WAITING_FOR_WORKOUT_TITLE
 
-	if not message:
+	if not message and call:
 		message_text = '''New workout\n\nWhat would you like to name your workout?'''
-		send_message(message_text)
+		send_edited_message(message_text, call.message.id)
 		WAITING_FOR_INPUT = True
 		WAITING_FOR_WORKOUT_TITLE = True
 	else:
@@ -375,8 +368,7 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 	global \
 		WAITING_FOR_EXERCISE_NAME, \
 		WAITING_FOR_EXERCISE_VIDEO_LINK, \
-		WAITING_FOR_MUSCLES_WORKED, \
-		WAITING_FOR_REP_RANGE
+		WAITING_FOR_MUSCLES_WORKED
 
 	WAITING_FOR_INPUT = True
 
@@ -406,16 +398,6 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 			WAITING_FOR_MUSCLES_WORKED = False
 			if not skip_setting:
 				EXERCISE.muscles_worked = message.text.split(",")
-
-			# rep range here
-			send_message("Almost done! If you would like to add the target rep range (e.g '5-7') here, go ahead! \nIf not, click /done.")
-			WAITING_FOR_REP_RANGE = True
-
-		elif message_type == "EXERCISE_TARGET_REP_RANGE":
-			WAITING_FOR_REP_RANGE = False
-			if not skip_setting:
-				rep_range = [x.strip() for x in message.text.split("-")]
-				EXERCISE.target_rep_range = rep_range
 
 			# done. Add workout to users workouts.
 			WAITING_FOR_INPUT = False
