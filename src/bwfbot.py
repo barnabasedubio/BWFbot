@@ -1,8 +1,11 @@
 import telebot
+import time
 
 from user import User
 from exercise import Exercise
 from workout import Workout
+
+from copy import deepcopy
 
 # configuration
 with open("../token.txt", "r", encoding="utf8") as fp:
@@ -12,7 +15,7 @@ with open("../token.txt", "r", encoding="utf8") as fp:
 BOT = telebot.TeleBot(TOKEN)
 USER = User()
 CHAT_ID = None
-MESSAGE_IDS = []
+MESSAGES = []
 
 WAITING_FOR_INPUT = False
 
@@ -53,7 +56,7 @@ def explore_community_workouts_answer_markup():
 	markup = telebot.types.InlineKeyboardMarkup()
 	markup.add(
 		telebot.types.InlineKeyboardButton("Yes", callback_data="explore_community"),
-		telebot.types.InlineKeyboardButton("No", callback_data="display_commands"),
+		telebot.types.InlineKeyboardButton("No", callback_data="start_menu"),
 	)
 	return markup
 
@@ -90,7 +93,6 @@ def start_options_markup():
 	markup.add(telebot.types.InlineKeyboardButton("Start one of my workouts", callback_data="choose_workouts"))
 	markup.add(telebot.types.InlineKeyboardButton("Create a new workout", callback_data="create_workout"))
 	markup.add(telebot.types.InlineKeyboardButton("Explore the community", callback_data="explore_community"))
-	markup.add(telebot.types.InlineKeyboardButton("Something else", callback_data="display_commands"))
 	return markup
 
 
@@ -103,6 +105,8 @@ def initialize(message):
 	global USER
 	global CHAT_ID
 
+	MESSAGES.append(message)
+
 	CHAT_ID = message.chat.id
 	# TODO: USER = get_user_from_id(message.from_user.id)
 	is_new_user = False
@@ -113,11 +117,16 @@ def initialize(message):
 	show_start_options(is_new_user)
 
 
-def show_start_options(is_new_user=False):
-	welcome_text = f'''\n\n{"Welcome" if is_new_user else "Welcome back"}, {USER.first_name}. What would you like to do today?
-		\n
-		Click /commands to get a comprehensive view of all possible commands you can give me.'''
-	BOT.send_message(CHAT_ID, welcome_text, reply_markup=start_options_markup())
+def show_start_options(is_new_user=False, call=None):
+
+	if call:
+		message_text = "What can I help you with?\n\nClick /commands to get a comprehensive view of all possible commands you can give me."
+		send_edited_message(message_text, call.message.id, reply_markup=start_options_markup())
+	else:
+		message_text = f'''{"Welcome" if is_new_user else "Welcome back"}, {USER.first_name}. What would you like to do today?
+				\n
+				Click /commands to get a comprehensive view of all possible commands you can give me.'''
+		send_message(message_text, reply_markup=start_options_markup())
 
 
 @BOT.callback_query_handler(func=lambda call: True)
@@ -147,12 +156,12 @@ def handle_callback_query(call):
 		handle_commands_request(call)
 
 	elif call.data == "start_menu":
-		show_start_options()
+		show_start_options(call=call)
 
 	elif call.data.startswith("START_WORKOUT:"):
 		workout_title = call.data.replace("START_WORKOUT:", "")
 		WORKOUT_TITLE = workout_title
-		BOT.send_message(CHAT_ID, "Let's go!")
+		send_message("Let's go!")
 		do_workout()
 
 
@@ -167,6 +176,8 @@ def proceed_to_next(message):
 	:param message
 	"""
 	global CURRENT_EXERCISE_INDEX
+
+	MESSAGES.append(message)
 
 	if WAITING_FOR_EXERCISE_VIDEO_LINK:
 		# user skipped the video link entry
@@ -186,29 +197,48 @@ def proceed_to_next(message):
 # handle /done command
 @BOT.message_handler(commands=["done"])
 def finish(message):
-	global WAITING_FOR_INPUT, WAITING_FOR_REP_COUNT
+	global \
+		WAITING_FOR_INPUT, \
+		WAITING_FOR_REP_COUNT, \
+		CURRENT_EXERCISE_INDEX
+
+	MESSAGES.append(message)
 
 	if WAITING_FOR_REP_RANGE:
 		# user skipped the target rep range entry
 		add_exercise(message, "EXERCISE_TARGET_REP_RANGE", True)
-	if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.exercises) - 1:
+
+	elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.exercises) - 1:
 		# user is done with their workout. End workout and add it to their completed workouts
 		WORKOUT.started = False
 		USER.completed_workouts.append(WORKOUT)
+
+		# reset exercise index
+		CURRENT_EXERCISE_INDEX = 0  # reset
+
 		# deactivate user input handling
 		WAITING_FOR_REP_COUNT = False
 		WAITING_FOR_INPUT = False
+
 		workout_completed()
 
 
 # handle clear request
 @BOT.message_handler(commands=["clear"])
 def clear_dialog(message):
-	pass  # TODO
+	global MESSAGES
+
+	MESSAGES.append(message)
+
+	send_message("Clearing chat...")
+	time.sleep(1.5)
+	while MESSAGES:
+		BOT.delete_message(CHAT_ID, MESSAGES[0].id)
+		MESSAGES = MESSAGES[1:]
 
 
 # only if bot is expecting user input
-@BOT.message_handler(func=lambda message: message.text and WAITING_FOR_INPUT)
+@BOT.message_handler(func=lambda message: message.text)
 def handle_user_input(message):
 	"""
 	handles actual user input written to chat.
@@ -216,22 +246,27 @@ def handle_user_input(message):
 	:param message:
 	:return:
 	"""
-	# create workout
-	if WAITING_FOR_WORKOUT_TITLE:
-		get_workout_title_from_input(message)
-	# create exercise
-	elif WAITING_FOR_EXERCISE_NAME:
-		add_exercise(message, "EXERCISE_NAME")
-	elif WAITING_FOR_EXERCISE_VIDEO_LINK:
-		add_exercise(message, "EXERCISE_VIDEO_LINK")
-	elif WAITING_FOR_MUSCLES_WORKED:
-		add_exercise(message, "EXERCISE_MUSCLES_WORKED")
-	elif WAITING_FOR_REP_RANGE:
-		add_exercise(message, "EXERCISE_TARGET_REP_RANGE")
-	# add reps to exercise
-	elif WAITING_FOR_REP_COUNT:
-		if message.text.isnumeric():
-			do_workout(True, message)
+	# log all message ids
+	MESSAGES.append(message)
+
+	# only handle if the bot is also waiting for user input
+	if WAITING_FOR_INPUT:
+		# create workout
+		if WAITING_FOR_WORKOUT_TITLE:
+			get_workout_title_from_input(message)
+		# create exercise
+		elif WAITING_FOR_EXERCISE_NAME:
+			add_exercise(message, "EXERCISE_NAME")
+		elif WAITING_FOR_EXERCISE_VIDEO_LINK:
+			add_exercise(message, "EXERCISE_VIDEO_LINK")
+		elif WAITING_FOR_MUSCLES_WORKED:
+			add_exercise(message, "EXERCISE_MUSCLES_WORKED")
+		elif WAITING_FOR_REP_RANGE:
+			add_exercise(message, "EXERCISE_TARGET_REP_RANGE")
+		# add reps to exercise
+		elif WAITING_FOR_REP_COUNT:
+			if message.text.isnumeric():
+				do_workout(True, message)
 
 
 @BOT.message_handler(content_types=["contact"])
@@ -240,20 +275,47 @@ def handle_contact(message):
 # ----------------- FUNCTIONS ------------------
 
 
-def choose_workout(call):
-	# check if user has any saved workouts
-	if USER.created_workouts:
-		# display a list of all stored user workouts
-		workout_titles = [workout.title for workout in USER.created_workouts]
-		message_text = "Which workout routine would you like to start?"
-		BOT.send_message(CHAT_ID, message_text, reply_markup=list_workouts_markup(workout_titles))
+def send_message(message_text, reply_markup=None):
+	global MESSAGES
 
+	sent_message = BOT.send_message(CHAT_ID, message_text, reply_markup=reply_markup)
+	MESSAGES.append(sent_message)
+
+
+def send_edited_message(message_text, previous_message_id, reply_markup=None):
+	global MESSAGES
+
+	message_to_edit = None
+	message_index = None
+
+	for ix, message in enumerate(MESSAGES):
+		if message.id == previous_message_id:
+			message_to_edit = message
+			message_index = ix
+			break
+
+	MESSAGES[message_index] = BOT.edit_message_text(
+								message_text,
+								CHAT_ID,
+								message_to_edit.id,
+								reply_markup=reply_markup)
+
+
+def choose_workout(call):
+	if USER.saved_workouts:
+		# display a list of all stored user workouts
+		workout_titles = [workout.title for workout in USER.saved_workouts]
+		message_text = "Which workout routine would you like to start?"
+		send_edited_message(
+			message_text,
+			call.message.id,
+			reply_markup=list_workouts_markup(workout_titles))
 	else:
-		# user has no saved workouts. ask if user wants to create one
-		# yes -> create workout
-		# no -> back to start options
 		message_text = "You don't have any stored workouts. Would you like to create a new one?"
-		BOT.send_message(CHAT_ID, message_text, reply_markup=create_workout_answer_markup())
+		send_edited_message(
+			message_text,
+			call.message.id,
+			reply_markup=create_workout_answer_markup())
 
 
 def get_workout_title_from_input(message=None):
@@ -271,7 +333,7 @@ def get_workout_title_from_input(message=None):
 
 	if not message:
 		message_text = '''New workout\n\nWhat would you like to name your workout?'''
-		BOT.send_message(CHAT_ID, message_text)
+		send_message(message_text)
 		WAITING_FOR_INPUT = True
 		WAITING_FOR_WORKOUT_TITLE = True
 	else:
@@ -291,9 +353,9 @@ def set_workout(message):
 
 	workout_title = message.text
 	new_workout = Workout(workout_title, message.from_user.id)
-	USER.created_workouts.append(new_workout)
+	USER.saved_workouts.append(new_workout)
 	message_text = f'''New workout\n\n{workout_title} has been created! Now let's add some exercises.'''
-	BOT.send_message(CHAT_ID, message_text, reply_markup=add_exercise_markup())
+	send_message(message_text, reply_markup=add_exercise_markup())
 
 
 def add_exercise(message=None, message_type="", skip_setting=False):
@@ -320,7 +382,7 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 
 	if not message:
 		message_text = "Please give the exercise a name."
-		BOT.send_message(CHAT_ID, message_text)
+		send_message(message_text)
 		WAITING_FOR_EXERCISE_NAME = True
 	else:
 		if message_type == "EXERCISE_NAME":
@@ -328,7 +390,7 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 			EXERCISE.name = message.text
 			WAITING_FOR_EXERCISE_NAME = False
 			# retrieved exercise name. Ask for youtube link
-			BOT.send_message(CHAT_ID, "Great! \nWould you like to add a Youtube link associated with this exercise? If not, simply click /next.")
+			send_message("Great! \nWould you like to add a Youtube link associated with this exercise? If not, simply click /next.")
 			WAITING_FOR_EXERCISE_VIDEO_LINK = True
 
 		elif message_type == "EXERCISE_VIDEO_LINK":
@@ -337,7 +399,7 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 				EXERCISE.video_link = message.text
 
 			# muscles worked here
-			BOT.send_message(CHAT_ID, "How about a brief description of muscles worked, for example  'chest, triceps, front delts'?\n(Or click /next to continue)")
+			send_message("How about a brief description of muscles worked, for example  'chest, triceps, front delts'?\n(Or click /next to continue)")
 			WAITING_FOR_MUSCLES_WORKED = True
 
 		elif message_type == "EXERCISE_MUSCLES_WORKED":
@@ -346,7 +408,7 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 				EXERCISE.muscles_worked = message.text.split(",")
 
 			# rep range here
-			BOT.send_message(CHAT_ID, "Almost done! If you would like to add the target rep range (e.g '5-7') here, go ahead! \nIf not, click /done.")
+			send_message("Almost done! If you would like to add the target rep range (e.g '5-7') here, go ahead! \nIf not, click /done.")
 			WAITING_FOR_REP_RANGE = True
 
 		elif message_type == "EXERCISE_TARGET_REP_RANGE":
@@ -356,13 +418,11 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 				EXERCISE.target_rep_range = rep_range
 
 			# done. Add workout to users workouts.
-			message_text = f"Exercise summary: {str(EXERCISE)}"
-			BOT.send_message(CHAT_ID, message_text)
-			USER.created_workouts[-1].exercises.append(EXERCISE)
-			BOT.send_message(CHAT_ID, f"Added {EXERCISE.name} to {USER.created_workouts[-1].title}!")
 			WAITING_FOR_INPUT = False
+			USER.saved_workouts[-1].exercises.append(EXERCISE)
 
-			BOT.send_message(CHAT_ID, "Would you like to add another exercise?", reply_markup=add_another_exercise_markup())
+			message_text = f"Exercise summary:\n{str(EXERCISE)}\n\nAdded {EXERCISE.name} to {USER.saved_workouts[-1].title}!\nWould you like to add another exercise?"
+			send_message(message_text, reply_markup=add_another_exercise_markup())
 
 
 def do_workout(new_rep_entry=False, message=None):
@@ -379,8 +439,11 @@ def do_workout(new_rep_entry=False, message=None):
 
 	if not WORKOUT.started:
 		# only happens once (when the workout gets started initially)
-		WORKOUT = [w for w in USER.created_workouts if w.title == WORKOUT_TITLE][0]
-		WORKOUT.started = True
+		WORKOUT = deepcopy([w for w in USER.saved_workouts if w.title == WORKOUT_TITLE][0])
+		if not WORKOUT.exercises:  # display empty workout message
+			pass
+		else:
+			WORKOUT.started = True
 
 	# create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
 	exercises_in_workout = WORKOUT.exercises
@@ -395,7 +458,7 @@ def do_workout(new_rep_entry=False, message=None):
 			# the user is beginning the exercise. Show the exercise info
 			message_text = f"Time for {current_exercise.name}! After each set, send me the amount of reps. Once you are done with the exercise, click /next."
 
-		BOT.send_message(CHAT_ID, message_text, reply_markup=number_pad_markup())
+		send_message(message_text, reply_markup=number_pad_markup())
 
 		WAITING_FOR_REP_COUNT = True
 		WAITING_FOR_INPUT = True
@@ -403,15 +466,11 @@ def do_workout(new_rep_entry=False, message=None):
 	else:
 		rep_count = int(message.text)
 		WORKOUT.exercises[CURRENT_EXERCISE_INDEX].reps.append(rep_count)
-		print(WORKOUT.exercises[CURRENT_EXERCISE_INDEX].reps)
 
 
 def workout_completed():
-	global CURRENT_EXERCISE_INDEX
-
-	CURRENT_EXERCISE_INDEX = 0  # reset
 	message_text = f"Congratulations, you're done! {WORKOUT.display_summary()}"
-	BOT.send_message(CHAT_ID, message_text)
+	send_message(message_text)
 
 
 def handle_explore_community(call):
@@ -423,13 +482,13 @@ def handle_community_request(call):
 	# yes -> explore community
 	# no -> what can I help you with? show commands
 	message_text = "Would you like to explore workouts created by the bodyweight fitness community?"
-	BOT.send_message(CHAT_ID, message_text, reply_markup=explore_community_workouts_answer_markup())
+	send_edited_message(message_text, call.message.id, reply_markup=explore_community_workouts_answer_markup())
 
 
 def handle_commands_request(call):
 	# display a chat saying 'What can I help you with?' Followed by the list of possible commands.
-	BOT.send_message(CHAT_ID, "What can I help you with?")
-	BOT.send_message(CHAT_ID, "commands list is currently being worked on.")
+	send_message("What can I help you with?")
+	send_message("commands list is currently being worked on.")
 	pass
 
 
