@@ -184,9 +184,6 @@ def handle_callback_query(call):
 	elif call.data == "request_community":
 		handle_community_request(call)
 
-	elif call.data == "display_commands":
-		handle_commands_request(call)
-
 	elif call.data == "start_menu":
 		show_start_options(call=call)
 
@@ -201,7 +198,7 @@ def handle_callback_query(call):
 		WORKOUT_INDEX = USER.saved_workouts.index(temp_workout)
 
 		if temp_workout.exercises:
-			send_edited_message("Let's go!", call.message.id)
+			send_edited_message("Let's go! 💪", call.message.id)
 			do_workout()
 		else:
 			send_edited_message(f"{WORKOUT_TITLE} has no exercises. Do you want to add some?", call.message.id, reply_markup=add_exercise_markup())
@@ -249,13 +246,16 @@ def initialize(message):
 def show_start_options(is_new_user=False, call=None):
 
 	if call:
-		message_text = "What can I help you with?\n\nClick /commands to get a comprehensive view of all possible commands you can give me."
+		message_text = \
+			"What can I help you with?\n\n" \
+			"Type '/' to see all commands you can give me."
 		send_edited_message(message_text, call.message.id, reply_markup=start_options_markup())
 	else:
-		message_text = f'''{"Welcome" if is_new_user else "Welcome back"}, {USER.first_name}. What would you like to do today?
-				\n
-				Click /commands to get a comprehensive view of all possible commands you can give me.'''
-		send_message(message_text, reply_markup=start_options_markup())
+		message_text = f'''
+				{"Welcome" if is_new_user else "Welcome back"}, {USER.first_name}. What would you like to do today?
+				\nType '/' to see all commands you can give me.'''
+
+		send_message(message_text.strip(), reply_markup=start_options_markup())
 
 
 # handle /next command
@@ -378,14 +378,19 @@ def handle_user_input(message):
 # ----------------- FUNCTIONS ------------------
 
 
-def send_message(message_text, reply_markup=None):
+def send_message(message_text, reply_markup=None, parse_mode=""):
 	global MESSAGES
 
-	sent_message = BOT.send_message(CHAT_ID, message_text, reply_markup=reply_markup, disable_web_page_preview=True)
+	sent_message = BOT.send_message(
+					CHAT_ID,
+					message_text,
+					reply_markup=reply_markup, disable_web_page_preview=True,
+					parse_mode=parse_mode)
+
 	MESSAGES.append(sent_message)
 
 
-def send_edited_message(message_text, previous_message_id, reply_markup=None):
+def send_edited_message(message_text, previous_message_id, reply_markup=None, parse_mode=""):
 	global MESSAGES
 
 	message_to_edit = None
@@ -402,8 +407,8 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None):
 								CHAT_ID,
 								message_to_edit.id,
 								reply_markup=reply_markup,
-								disable_web_page_preview=True
-								)
+								disable_web_page_preview=True,
+								parse_mode=parse_mode)
 
 
 def choose_workout(call, comes_from=None):
@@ -506,7 +511,9 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 			EXERCISE.name = message.text
 			WAITING_FOR_EXERCISE_NAME = False
 			# retrieved exercise name. Ask for youtube link
-			send_message("Great! \nWould you like to add a Youtube link associated with this exercise? If not, simply click /next.")
+			send_message(
+				"Great!"
+				"\nWould you like to add a Youtube link associated with this exercise? If not, simply click /next.")
 			WAITING_FOR_EXERCISE_VIDEO_LINK = True
 
 		elif message_type == "EXERCISE_VIDEO_LINK":
@@ -515,18 +522,22 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 				EXERCISE.video_link = message.text
 
 			# muscles worked here
-			send_message("How about a brief description of muscles worked, for example  'chest, triceps, front delts'?\n(Or click /next to continue)")
+			send_message(
+				"How about a brief description of muscles worked, "
+				"like this: 'chest, triceps, front delts'?\n(Or click /next to continue)")
 			WAITING_FOR_MUSCLES_WORKED = True
 
 		elif message_type == "EXERCISE_MUSCLES_WORKED":
 			WAITING_FOR_MUSCLES_WORKED = False
 			if not skip_setting:
-				EXERCISE.muscles_worked = message.text.split(",")
+				muscles_worked = [muscle.strip().capitalize() for muscle in message.text.split(",")]
+				EXERCISE.muscles_worked = muscles_worked
 
 			# done. Add workout to users workouts.
 			WAITING_FOR_INPUT = False
 
-			# default location to add exercise is the most recently added workout, unless specified (WORKOUT_INDEX not None)
+			# default location to add exercise is the most recently added workout
+			# unless specified (WORKOUT_INDEX not None)
 			workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
 			USER.saved_workouts[workout_index].exercises.append(EXERCISE)
 
@@ -535,11 +546,19 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 
 def exercise_added(call=None):
 	workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
-	message_text = f"Exercise summary:\n{str(EXERCISE)}\n\nAdded {EXERCISE.name} to {USER.saved_workouts[workout_index].title}!\nWould you like to add another exercise?"
+	message_text = \
+		f"Exercise summary:\n\n" \
+		f"{str(EXERCISE)}\n"
 	if call:
-		send_edited_message(message_text, call.message.id, reply_markup=add_another_exercise_markup())
+		send_edited_message(message_text, call.message.id, parse_mode="MarkdownV2")
 	else:
-		send_message(message_text, reply_markup=add_another_exercise_markup())
+		send_message(message_text, parse_mode="MarkdownV2")
+
+	confirmation = \
+		f"Added {EXERCISE.name} to {USER.saved_workouts[workout_index].title}!\n" \
+		f"Would you like to add another exercise?"
+
+	send_message(confirmation, reply_markup=add_another_exercise_markup())
 
 
 def do_workout(new_rep_entry=False, message=None):
@@ -570,12 +589,19 @@ def do_workout(new_rep_entry=False, message=None):
 		if current_exercise == WORKOUT.exercises[-1]:
 			# user is performing the last exercise. Instead of /next, display /done
 			message_text = f"Your last exercise are {current_exercise.name}! After each set, send me the amount of reps. Once completed, click /done to finish your workout."
+			message_text = \
+				f"Almost done\\!\n" \
+				f"{str(current_exercise)}\n" \
+				f"Send me the rep count for each set\\. Once you're done, click /done\\."
 
 		else:
 			# the user is beginning the exercise. Show the exercise info
 			message_text = f"Time for {current_exercise.name}! After each set, send me the amount of reps. Once you are done with the exercise, click /next."
+			message_text = \
+				f"{str(current_exercise)}\n" \
+				f"Send me the rep count for each set\\. Once you're done, click /next\\."
 
-		send_message(message_text, reply_markup=number_pad_markup())
+		send_message(message_text, reply_markup=number_pad_markup(), parse_mode="MarkdownV2")
 
 		WAITING_FOR_REP_COUNT = True
 		WAITING_FOR_INPUT = True
@@ -611,13 +637,6 @@ def handle_community_request(call):
 	# no -> what can I help you with? show commands
 	message_text = "Would you like to explore workouts created by the bodyweight fitness community?"
 	send_edited_message(message_text, call.message.id, reply_markup=explore_community_workouts_answer_markup())
-
-
-def handle_commands_request(call):
-	# display a chat saying 'What can I help you with?' Followed by the list of possible commands.
-	send_message("What can I help you with?")
-	send_message("commands list is currently being worked on.")
-	pass
 
 
 def send_report():
