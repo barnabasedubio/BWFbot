@@ -10,6 +10,7 @@ class Exercise:
 		self.video_link = ""
 		self.muscles_worked = []
 		self.reps = []
+		self.information = ""  # custom information related to the exercise
 
 	def __str__(self):
 		name_string = f"\nName: {self.name}"

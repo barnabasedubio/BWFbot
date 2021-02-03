@@ -1,6 +1,12 @@
 import telebot
 import time
 
+from telebot.types import \
+	InlineKeyboardMarkup, \
+	InlineKeyboardButton, \
+	ReplyKeyboardMarkup, \
+	ReplyKeyboardRemove
+
 from user import User
 from exercise import Exercise
 from workout import Workout
@@ -38,51 +44,51 @@ CURRENT_EXERCISE_INDEX = 0
 
 
 def add_exercise_markup():
-	markup = telebot.types.InlineKeyboardMarkup()
-	markup.add(telebot.types.InlineKeyboardButton("Add exercise", callback_data="add_exercise"))
+	markup = InlineKeyboardMarkup()
+	markup.add(InlineKeyboardButton("Add exercise", callback_data="add_exercise"))
 	return markup
 
 
 def add_another_exercise_markup():
-	markup = telebot.types.InlineKeyboardMarkup()
-	markup.add(telebot.types.InlineKeyboardButton("Add another exercise", callback_data="add_exercise"))
-	markup.add(telebot.types.InlineKeyboardButton("Start workout", callback_data="exercise_menu:choose_workouts"))
-	markup.add(telebot.types.InlineKeyboardButton("Go to main menu", callback_data="start_menu"))
+	markup = InlineKeyboardMarkup()
+	markup.add(InlineKeyboardButton("Add another exercise", callback_data="add_exercise"))
+	markup.add(InlineKeyboardButton("Start workout", callback_data="exercise_menu:choose_workouts"))
+	markup.add(InlineKeyboardButton("Go to main menu", callback_data="start_menu"))
 	return markup
 
 
 def explore_community_workouts_answer_markup():
-	markup = telebot.types.InlineKeyboardMarkup()
+	markup = InlineKeyboardMarkup()
 	markup.add(
-		telebot.types.InlineKeyboardButton("Yes", callback_data="explore_community"),
-		telebot.types.InlineKeyboardButton("No", callback_data="start_menu"),
+		InlineKeyboardButton("Yes", callback_data="explore_community"),
+		InlineKeyboardButton("No", callback_data="start_menu"),
 	)
 	return markup
 
 
 def create_workout_answer_markup():
-	markup = telebot.types.InlineKeyboardMarkup()
+	markup = InlineKeyboardMarkup()
 	markup.add(
-		telebot.types.InlineKeyboardButton("Yes", callback_data="create_workout"),
-		telebot.types.InlineKeyboardButton("No", callback_data="request_community"),
+		InlineKeyboardButton("Yes", callback_data="create_workout"),
+		InlineKeyboardButton("No", callback_data="request_community"),
 	)
 	return markup
 
 
 def list_workouts_markup(workout_titles, comes_from=None):
-	markup = telebot.types.InlineKeyboardMarkup()
+	markup = InlineKeyboardMarkup()
 	for workout_title in workout_titles:
-		markup.add(telebot.types.InlineKeyboardButton(workout_title, callback_data=f"START_WORKOUT:{workout_title}"))
+		markup.add(InlineKeyboardButton(workout_title, callback_data=f"START_WORKOUT:{workout_title}"))
 	if comes_from == "add_another_exercise":
-		markup.add(telebot.types.InlineKeyboardButton("Go back", callback_data="exercise_added"))
+		markup.add(InlineKeyboardButton("Go back", callback_data="exercise_added"))
 	else:
-		markup.add(telebot.types.InlineKeyboardButton("Go back", callback_data="start_menu"))
+		markup.add(InlineKeyboardButton("Go back", callback_data="start_menu"))
 	return markup
 
 
 # number pad used to record reps
 def number_pad_markup():
-	number_pad = telebot.types.ReplyKeyboardMarkup(
+	number_pad = ReplyKeyboardMarkup(
 		resize_keyboard=False,
 		one_time_keyboard=False
 	)
@@ -92,15 +98,30 @@ def number_pad_markup():
 
 
 def start_options_markup():
-	markup = telebot.types.InlineKeyboardMarkup()
-	markup.add(telebot.types.InlineKeyboardButton("Start one of my workouts", callback_data="choose_workouts"))
-	markup.add(telebot.types.InlineKeyboardButton("Create a new workout", callback_data="create_workout"))
-	markup.add(telebot.types.InlineKeyboardButton("Explore the community", callback_data="explore_community"))
+	markup = InlineKeyboardMarkup()
+	markup.add(InlineKeyboardButton("Start one of my workouts", callback_data="choose_workouts"))
+	markup.add(InlineKeyboardButton("Create a new workout", callback_data="create_workout"))
+	markup.add(InlineKeyboardButton("Explore the community", callback_data="explore_community"))
+	return markup
+
+
+def delete_workout_markup(workout_titles):
+	markup = InlineKeyboardMarkup()
+	for workout_title in workout_titles:
+		markup.add(InlineKeyboardButton(workout_title, callback_data=f"DELETE_WORKOUT:{workout_title}"))
+	return markup
+
+
+def delete_workout_confirmation_markup(workout_title):
+	markup = InlineKeyboardMarkup()
+	markup.add(
+		InlineKeyboardButton("Yes", callback_data=f"CONFIRM_DELETE_WORKOUT:{workout_title}"),
+		InlineKeyboardButton("No", callback_data=f"ABORT_DELETE_WORKOUT:{workout_title}")
+	)
 	return markup
 
 
 # ----------------- HANDLERS --------------------
-
 @BOT.callback_query_handler(func=lambda call: True)
 def handle_callback_query(call):
 	"""
@@ -145,6 +166,21 @@ def handle_callback_query(call):
 		send_edited_message("Let's go!", call.message.id)
 		do_workout()
 
+	elif call.data.startswith("DELETE_WORKOUT:"):
+		workout_title = call.data.replace("DELETE_WORKOUT:", "")
+		WORKOUT_TITLE = workout_title
+		delete_workout(call=call, workout_title=workout_title)
+
+	elif call.data.startswith("CONFIRM_DELETE_WORKOUT:"):
+		if len(USER.saved_workouts) == 1:
+			USER.saved_workouts = []
+		else:
+			USER.saved_workouts = [w for w in USER.saved_workouts if w.title != WORKOUT_TITLE]
+		send_edited_message(f"Done! {WORKOUT_TITLE} is gone from your saved workouts.", call.message.id)
+
+	elif call.data.startswith("ABORT_DELETE_WORKOUT:"):
+		send_edited_message(f"Gotcha! Will not delete {WORKOUT_TITLE}.", call.message.id)
+
 
 # handle /start command
 @BOT.message_handler(commands=["start"])
@@ -152,6 +188,8 @@ def initialize(message):
 	global USER
 	global CHAT_ID
 
+	# in order to prevent any confusion, remove any inline reply markups that might cause problems
+	remove_inline_replies()
 	MESSAGES.append(message)
 
 	CHAT_ID = message.chat.id
@@ -244,7 +282,21 @@ def clear_dialog(message):
 		MESSAGES = MESSAGES[1:]
 
 
+@BOT.message_handler(commands=["delete"])
+def handle_delete_workout(message):
+	# in order to prevent any confusion, remove any inline reply markups that might cause problems
+	remove_inline_replies()
+
+	if USER.saved_workouts:
+		workout_titles = [w.title for w in USER.saved_workouts]
+		message_text = "Which workout would you like to delete?"
+		send_message(message_text, reply_markup=delete_workout_markup(workout_titles))
+	else:
+		send_message("You don't have any stored workouts.")
+
+
 # only if bot is expecting user input
+# needs to be the very last handler!!
 @BOT.message_handler(func=lambda message: message.text)
 def handle_user_input(message):
 	"""
@@ -274,16 +326,13 @@ def handle_user_input(message):
 				do_workout(True, message)
 
 
-@BOT.message_handler(content_types=["contact"])
-def handle_contact(message):
-	print(message.contact.phone_number)
 # ----------------- FUNCTIONS ------------------
 
 
 def send_message(message_text, reply_markup=None):
 	global MESSAGES
 
-	sent_message = BOT.send_message(CHAT_ID, message_text, reply_markup=reply_markup)
+	sent_message = BOT.send_message(CHAT_ID, message_text, reply_markup=reply_markup, disable_web_page_preview=True)
 	MESSAGES.append(sent_message)
 
 
@@ -303,7 +352,9 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None):
 								message_text,
 								CHAT_ID,
 								message_to_edit.id,
-								reply_markup=reply_markup)
+								reply_markup=reply_markup,
+								disable_web_page_preview=True
+								)
 
 
 def choose_workout(call, comes_from=None):
@@ -336,7 +387,7 @@ def get_workout_title_from_input(call=None, message=None):
 	condition gets executed. After user input has been handled by handle_workout_title()
 	and this function gets called again, it enters the else block, with the received
 	message from the input handler.
-
+	:param call
 	:param message:
 	:return:
 	"""
@@ -479,7 +530,17 @@ def do_workout(new_rep_entry=False, message=None):
 def workout_completed():
 	message_text = f"Congratulations, you're done! {WORKOUT.display_summary()}"
 	# number pad custom keyboard is not needed anymore
-	send_message(message_text, reply_markup=telebot.types.ReplyKeyboardRemove())
+	send_message(message_text, reply_markup=ReplyKeyboardRemove())
+
+
+def delete_workout(call, workout_title):
+	send_edited_message(f"Are you sure you want to delete {workout_title}?", call.message.id, reply_markup=delete_workout_confirmation_markup(workout_title))
+
+
+def remove_inline_replies():
+	for ix, message in enumerate(MESSAGES):
+		if type(message.reply_markup) is InlineKeyboardMarkup:
+			send_edited_message(message.text, message.id, reply_markup=None)
 
 
 def handle_explore_community(call):
