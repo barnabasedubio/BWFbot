@@ -201,7 +201,10 @@ def handle_callback_query(call):
 			send_edited_message("Let's go! 💪", call.message.id)
 			do_workout()
 		else:
-			send_edited_message(f"{WORKOUT_TITLE} has no exercises. Do you want to add some?", call.message.id, reply_markup=add_exercise_markup())
+			send_edited_message(
+				f"{WORKOUT_TITLE} has no exercises. Do you want to add some?",
+				call.message.id,
+				reply_markup=add_exercise_markup())
 
 	elif call.data.startswith("DELETE_WORKOUT:"):
 		workout_title = call.data.replace("DELETE_WORKOUT:", "")
@@ -338,7 +341,10 @@ def handle_delete_workout(message):
 
 	if USER.saved_workouts:
 		workout_titles = [w.title for w in USER.saved_workouts]
-		message_text = "Which workout would you like to delete?\n\n(Note: this doesn't affect your already completed workouts, so no worries)"
+		message_text = \
+			"Which workout would you like to delete?\n\n" \
+			"(Note: this doesn't affect your already completed workouts, so no worries)"
+
 		send_message(message_text, reply_markup=delete_workout_markup(workout_titles))
 	else:
 		send_message("You don't have any stored workouts.")
@@ -587,8 +593,7 @@ def do_workout(new_rep_entry=False, message=None):
 
 	if not new_rep_entry:
 		if current_exercise == WORKOUT.exercises[-1]:
-			# user is performing the last exercise. Instead of /next, display /done
-			message_text = f"Your last exercise are {current_exercise.name}! After each set, send me the amount of reps. Once completed, click /done to finish your workout."
+			# user is performing the last exercise
 			message_text = \
 				f"Almost done\\!\n" \
 				f"{str(current_exercise)}\n" \
@@ -596,7 +601,6 @@ def do_workout(new_rep_entry=False, message=None):
 
 		else:
 			# the user is beginning the exercise. Show the exercise info
-			message_text = f"Time for {current_exercise.name}! After each set, send me the amount of reps. Once you are done with the exercise, click /next."
 			message_text = \
 				f"{str(current_exercise)}\n" \
 				f"Send me the rep count for each set\\. Once you're done, click /next\\."
@@ -612,13 +616,25 @@ def do_workout(new_rep_entry=False, message=None):
 
 
 def workout_completed():
-	message_text = f"Congratulations, you're done! {WORKOUT.display_summary()}"
+	send_message("Great job 💪 You're done!")
+
+	# send workout report
+	# the report consists of: total rep amount | average reps per set for ever exercise.
+	report = "📊 *Workout Report*\n\n"
+	for exercise in WORKOUT.exercises:
+		total = sum(exercise.reps)
+		sets = str(len(exercise.reps))
+		average = "0" if total == 0 else str(round(total / len(exercise.reps), 2)).replace(".", "\\.")
+		report += f"*{exercise.name}*\nTotal: {total}\nNo. of sets: {sets}\nAverage per set: {average}\n\n"
+
 	# number pad custom keyboard is not needed anymore
-	send_message(message_text, reply_markup=ReplyKeyboardRemove())
+	send_message(report, reply_markup=ReplyKeyboardRemove(), parse_mode="MarkdownV2")
 
 
 def delete_workout(call, workout_title):
-	send_edited_message(f"Are you sure you want to delete {workout_title}?", call.message.id, reply_markup=delete_workout_confirmation_markup(workout_title))
+	send_edited_message(
+		f"Are you sure you want to delete {workout_title}?",
+		call.message.id, reply_markup=delete_workout_confirmation_markup(workout_title))
 
 
 def remove_inline_replies():
@@ -627,7 +643,7 @@ def remove_inline_replies():
 			send_edited_message(message.text, message.id, reply_markup=None)
 
 
-def handle_explore_community(call):
+def handle_explore_community(call=None):
 	pass
 
 
