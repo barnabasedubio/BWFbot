@@ -17,16 +17,17 @@ from copy import deepcopy
 with open("../token.txt", "r", encoding="utf8") as fp:
 	TOKEN = fp.read()
 
-# global variables
+
 BOT = telebot.TeleBot(TOKEN)
 USER = User()
 CHAT_ID = None
 MESSAGES = []
 
+# state variables
 WAITING_FOR_INPUT = False
 
 WORKOUT = Workout()
-WORKOUT_INDEX = 0
+WORKOUT_INDEX = None
 WORKOUT_TITLE = ""
 WAITING_FOR_WORKOUT_TITLE = False
 
@@ -39,6 +40,38 @@ WAITING_FOR_SETUP_DONE = False
 WAITING_FOR_REP_COUNT = False
 CURRENT_EXERCISE_INDEX = 0
 
+
+def reset_state():
+	# reset the global state
+	global \
+		WAITING_FOR_INPUT, \
+		WORKOUT, \
+		WORKOUT_INDEX, \
+		WORKOUT_TITLE, \
+		WAITING_FOR_WORKOUT_TITLE, \
+		EXERCISE, \
+		WAITING_FOR_EXERCISE_NAME, \
+		WAITING_FOR_EXERCISE_VIDEO_LINK, \
+		WAITING_FOR_MUSCLES_WORKED, \
+		WAITING_FOR_SETUP_DONE, \
+		WAITING_FOR_REP_COUNT, \
+		CURRENT_EXERCISE_INDEX
+
+	WAITING_FOR_INPUT = False
+
+	WORKOUT = Workout()
+	WORKOUT_INDEX = None
+	WORKOUT_TITLE = ""
+	WAITING_FOR_WORKOUT_TITLE = False
+
+	EXERCISE = Exercise()
+	WAITING_FOR_EXERCISE_NAME = False
+	WAITING_FOR_EXERCISE_VIDEO_LINK = False
+	WAITING_FOR_MUSCLES_WORKED = False
+	WAITING_FOR_SETUP_DONE = False
+
+	WAITING_FOR_REP_COUNT = False
+	CURRENT_EXERCISE_INDEX = 0
 
 # ----------------- MARKUPS --------------------
 
@@ -128,7 +161,7 @@ def handle_callback_query(call):
 	handles all inline keyboard responses
 	:param call
 	"""
-	global WORKOUT_TITLE
+	global WORKOUT_TITLE, WORKOUT_INDEX
 
 	if call.data == "choose_workouts":
 		choose_workout(call=call)
@@ -163,8 +196,15 @@ def handle_callback_query(call):
 	elif call.data.startswith("START_WORKOUT:"):
 		workout_title = call.data.replace("START_WORKOUT:", "")
 		WORKOUT_TITLE = workout_title
-		send_edited_message("Let's go!", call.message.id)
-		do_workout()
+
+		temp_workout = [w for w in USER.saved_workouts if w.title == WORKOUT_TITLE][0]
+		WORKOUT_INDEX = USER.saved_workouts.index(temp_workout)
+
+		if temp_workout.exercises:
+			send_edited_message("Let's go!", call.message.id)
+			do_workout()
+		else:
+			send_edited_message(f"{WORKOUT_TITLE} has no exercises. Do you want to add some?", call.message.id, reply_markup=add_exercise_markup())
 
 	elif call.data.startswith("DELETE_WORKOUT:"):
 		workout_title = call.data.replace("DELETE_WORKOUT:", "")
@@ -188,8 +228,12 @@ def initialize(message):
 	global USER
 	global CHAT_ID
 
+	# reset application state for every new session
+	reset_state()
+
 	# in order to prevent any confusion, remove any inline reply markups that might cause problems
 	remove_inline_replies()
+
 	MESSAGES.append(message)
 
 	CHAT_ID = message.chat.id
@@ -274,6 +318,8 @@ def clear_dialog(message):
 	global MESSAGES
 
 	MESSAGES.append(message)
+	# reset application state if history is cleared, in order to prevent any confusion
+	reset_state()
 
 	send_message("Clearing chat...")
 	time.sleep(1.5)
@@ -284,12 +330,15 @@ def clear_dialog(message):
 
 @BOT.message_handler(commands=["delete"])
 def handle_delete_workout(message):
+	MESSAGES.append(message)
 	# in order to prevent any confusion, remove any inline reply markups that might cause problems
 	remove_inline_replies()
 
+	reset_state()
+
 	if USER.saved_workouts:
 		workout_titles = [w.title for w in USER.saved_workouts]
-		message_text = "Which workout would you like to delete?"
+		message_text = "Which workout would you like to delete?\n\n(Note: this doesn't affect your already completed workouts, so no worries)"
 		send_message(message_text, reply_markup=delete_workout_markup(workout_titles))
 	else:
 		send_message("You don't have any stored workouts.")
@@ -399,10 +448,15 @@ def get_workout_title_from_input(call=None, message=None):
 		WAITING_FOR_INPUT = True
 		WAITING_FOR_WORKOUT_TITLE = True
 	else:
-		# received input, set global flags back to false
-		WAITING_FOR_INPUT = False
-		WAITING_FOR_WORKOUT_TITLE = False
-		set_workout(message)
+		if [w for w in USER.saved_workouts if w.title == message.text]:
+			send_message(f"{message.text} already exists in your saved workouts. Could you please choose another name?")
+			WAITING_FOR_INPUT = True
+			WAITING_FOR_WORKOUT_TITLE = True
+		else:
+			# received input, set global flags back to false
+			WAITING_FOR_INPUT = False
+			WAITING_FOR_WORKOUT_TITLE = False
+			set_workout(message)
 
 
 def set_workout(message):
@@ -471,13 +525,17 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 
 			# done. Add workout to users workouts.
 			WAITING_FOR_INPUT = False
-			USER.saved_workouts[-1].exercises.append(EXERCISE)
+
+			# default location to add exercise is the most recently added workout, unless specified (WORKOUT_INDEX not None)
+			workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
+			USER.saved_workouts[workout_index].exercises.append(EXERCISE)
 
 			exercise_added()
 
 
 def exercise_added(call=None):
-	message_text = f"Exercise summary:\n{str(EXERCISE)}\n\nAdded {EXERCISE.name} to {USER.saved_workouts[-1].title}!\nWould you like to add another exercise?"
+	workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
+	message_text = f"Exercise summary:\n{str(EXERCISE)}\n\nAdded {EXERCISE.name} to {USER.saved_workouts[workout_index].title}!\nWould you like to add another exercise?"
 	if call:
 		send_edited_message(message_text, call.message.id, reply_markup=add_another_exercise_markup())
 	else:
