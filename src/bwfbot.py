@@ -625,7 +625,8 @@ def workout_completed():
 		total = sum(exercise.reps)
 		sets = str(len(exercise.reps))
 		average = "0" if total == 0 else str(round(total / len(exercise.reps), 2)).replace(".", "\\.")
-		report += f"*{exercise.name}*\nTotal: {total}\nNo. of sets: {sets}\nAverage per set: {average}\n\n"
+		print(total, sets, average)
+		report += f"*{exercise.name}*\nTotal: {total}\nNo\\. of sets: {sets}\nAverage per set: {average}\n\n"
 
 	# number pad custom keyboard is not needed anymore
 	send_message(report, reply_markup=ReplyKeyboardRemove(), parse_mode="MarkdownV2")
