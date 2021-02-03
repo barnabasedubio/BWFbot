@@ -46,7 +46,7 @@ def add_exercise_markup():
 def add_another_exercise_markup():
 	markup = telebot.types.InlineKeyboardMarkup()
 	markup.add(telebot.types.InlineKeyboardButton("Add another exercise", callback_data="add_exercise"))
-	markup.add(telebot.types.InlineKeyboardButton("Start workout", callback_data="choose_workouts"))
+	markup.add(telebot.types.InlineKeyboardButton("Start workout", callback_data="exercise_menu:choose_workouts"))
 	markup.add(telebot.types.InlineKeyboardButton("Go to main menu", callback_data="start_menu"))
 	return markup
 
@@ -69,10 +69,14 @@ def create_workout_answer_markup():
 	return markup
 
 
-def list_workouts_markup(workout_titles):
+def list_workouts_markup(workout_titles, comes_from=None):
 	markup = telebot.types.InlineKeyboardMarkup()
 	for workout_title in workout_titles:
 		markup.add(telebot.types.InlineKeyboardButton(workout_title, callback_data=f"START_WORKOUT:{workout_title}"))
+	if comes_from == "add_another_exercise":
+		markup.add(telebot.types.InlineKeyboardButton("Go back", callback_data="exercise_added"))
+	else:
+		markup.add(telebot.types.InlineKeyboardButton("Go back", callback_data="start_menu"))
 	return markup
 
 
@@ -96,6 +100,50 @@ def start_options_markup():
 
 
 # ----------------- HANDLERS --------------------
+
+@BOT.callback_query_handler(func=lambda call: True)
+def handle_callback_query(call):
+	"""
+	handles all inline keyboard responses
+	:param call
+	"""
+	global WORKOUT_TITLE
+
+	if call.data == "choose_workouts":
+		choose_workout(call=call)
+
+	elif call.data == "exercise_menu:choose_workouts":
+		# user had the option to add another exercise, start workout, or go to the main menu.
+		# clicking start workout should show the saved workout list, but the back button should not go
+		# to the main menu (per usual), but back to to add another exercise option
+		choose_workout(call=call, comes_from="add_another_exercise")
+
+	elif call.data == "create_workout":
+		get_workout_title_from_input(call)
+
+	elif call.data == "add_exercise":
+		add_exercise(call=call)
+
+	elif call.data == "explore_community":
+		handle_explore_community(call)
+
+	elif call.data == "request_community":
+		handle_community_request(call)
+
+	elif call.data == "display_commands":
+		handle_commands_request(call)
+
+	elif call.data == "start_menu":
+		show_start_options(call=call)
+
+	elif call.data == "exercise_added":
+		exercise_added(call)
+
+	elif call.data.startswith("START_WORKOUT:"):
+		workout_title = call.data.replace("START_WORKOUT:", "")
+		WORKOUT_TITLE = workout_title
+		send_edited_message("Let's go!", call.message.id)
+		do_workout()
 
 
 # handle /start command
@@ -128,42 +176,6 @@ def show_start_options(is_new_user=False, call=None):
 		send_message(message_text, reply_markup=start_options_markup())
 
 
-@BOT.callback_query_handler(func=lambda call: True)
-def handle_callback_query(call):
-	"""
-	handles all inline keyboard responses
-	:param call
-	"""
-	global WORKOUT_TITLE
-
-	if call.data == "choose_workouts":
-		choose_workout(call)
-
-	elif call.data == "create_workout":
-		get_workout_title_from_input(call)
-
-	elif call.data == "add_exercise":
-		add_exercise()
-
-	elif call.data == "explore_community":
-		handle_explore_community(call)
-
-	elif call.data == "request_community":
-		handle_community_request(call)
-
-	elif call.data == "display_commands":
-		handle_commands_request(call)
-
-	elif call.data == "start_menu":
-		show_start_options(call=call)
-
-	elif call.data.startswith("START_WORKOUT:"):
-		workout_title = call.data.replace("START_WORKOUT:", "")
-		WORKOUT_TITLE = workout_title
-		send_message("Let's go!")
-		do_workout()
-
-
 # handle /next command
 @BOT.message_handler(commands=["next"])
 def proceed_to_next(message):
@@ -180,11 +192,11 @@ def proceed_to_next(message):
 
 	if WAITING_FOR_EXERCISE_VIDEO_LINK:
 		# user skipped the video link entry
-		add_exercise(message, "EXERCISE_VIDEO_LINK", True)
+		add_exercise(message=message, message_type="EXERCISE_VIDEO_LINK", skip_setting=True)
 
 	elif WAITING_FOR_MUSCLES_WORKED:
 		# user skipped the muscles worked entry
-		add_exercise(message, "EXERCISE_MUSCLES_WORKED", True)
+		add_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED", skip_setting=True)
 
 	elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX != len(WORKOUT.exercises) - 1:
 		# display the next exercise in the workout to the user
@@ -251,11 +263,11 @@ def handle_user_input(message):
 			get_workout_title_from_input(message=message)
 		# create exercise
 		elif WAITING_FOR_EXERCISE_NAME:
-			add_exercise(message, "EXERCISE_NAME")
+			add_exercise(message=message, message_type="EXERCISE_NAME")
 		elif WAITING_FOR_EXERCISE_VIDEO_LINK:
-			add_exercise(message, "EXERCISE_VIDEO_LINK")
+			add_exercise(message=message, message_type="EXERCISE_VIDEO_LINK")
 		elif WAITING_FOR_MUSCLES_WORKED:
-			add_exercise(message, "EXERCISE_MUSCLES_WORKED")
+			add_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED")
 		# add reps to exercise
 		elif WAITING_FOR_REP_COUNT:
 			if message.text.isnumeric():
@@ -294,15 +306,21 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None):
 								reply_markup=reply_markup)
 
 
-def choose_workout(call):
+def choose_workout(call, comes_from=None):
 	if USER.saved_workouts:
 		# display a list of all stored user workouts
 		workout_titles = [workout.title for workout in USER.saved_workouts]
 		message_text = "Which workout routine would you like to start?"
+
+		if comes_from == "add_another_exercise":
+			reply_markup = list_workouts_markup(workout_titles, comes_from="add_another_exercise")
+		else:
+			reply_markup = list_workouts_markup(workout_titles)
+
 		send_edited_message(
 			message_text,
 			call.message.id,
-			reply_markup=list_workouts_markup(workout_titles))
+			reply_markup=reply_markup)
 	else:
 		message_text = "You don't have any stored workouts. Would you like to create a new one?"
 		send_edited_message(
@@ -351,9 +369,10 @@ def set_workout(message):
 	send_message(message_text, reply_markup=add_exercise_markup())
 
 
-def add_exercise(message=None, message_type="", skip_setting=False):
+def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 	"""
 	in a similar vein to get_workout_title(), this function gets called multiple times in order to store user input
+	:param call
 	:param message:
 	:param message_type
 	:param skip_setting
@@ -372,9 +391,9 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 
 	WAITING_FOR_INPUT = True
 
-	if not message:
+	if not message and call:
 		message_text = "Please give the exercise a name."
-		send_message(message_text)
+		send_edited_message(message_text, call.message.id)
 		WAITING_FOR_EXERCISE_NAME = True
 	else:
 		if message_type == "EXERCISE_NAME":
@@ -403,8 +422,15 @@ def add_exercise(message=None, message_type="", skip_setting=False):
 			WAITING_FOR_INPUT = False
 			USER.saved_workouts[-1].exercises.append(EXERCISE)
 
-			message_text = f"Exercise summary:\n{str(EXERCISE)}\n\nAdded {EXERCISE.name} to {USER.saved_workouts[-1].title}!\nWould you like to add another exercise?"
-			send_message(message_text, reply_markup=add_another_exercise_markup())
+			exercise_added()
+
+
+def exercise_added(call=None):
+	message_text = f"Exercise summary:\n{str(EXERCISE)}\n\nAdded {EXERCISE.name} to {USER.saved_workouts[-1].title}!\nWould you like to add another exercise?"
+	if call:
+		send_edited_message(message_text, call.message.id, reply_markup=add_another_exercise_markup())
+	else:
+		send_message(message_text, reply_markup=add_another_exercise_markup())
 
 
 def do_workout(new_rep_entry=False, message=None):
@@ -452,7 +478,8 @@ def do_workout(new_rep_entry=False, message=None):
 
 def workout_completed():
 	message_text = f"Congratulations, you're done! {WORKOUT.display_summary()}"
-	send_message(message_text)
+	# number pad custom keyboard is not needed anymore
+	send_message(message_text, reply_markup=telebot.types.ReplyKeyboardRemove())
 
 
 def handle_explore_community(call):
