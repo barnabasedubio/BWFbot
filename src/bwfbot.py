@@ -179,7 +179,7 @@ def handle_callback_query(call):
 		add_exercise(call=call)
 
 	elif call.data == "explore_community":
-		handle_explore_community(call)
+		handle_explore_community()
 
 	elif call.data == "request_community":
 		handle_community_request(call)
@@ -644,7 +644,7 @@ def remove_inline_replies():
 			send_edited_message(message.text, message.id, reply_markup=None)
 
 
-def handle_explore_community(call=None):
+def handle_explore_community():
 	pass
 
 
