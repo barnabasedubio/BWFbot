@@ -97,6 +97,7 @@ def explore_community_workouts_answer_markup():
 	return markup
 
 
+# the markup that appears on "You do not have any stored workouts. Would you like to create one?"
 def create_workout_answer_markup():
 	markup = InlineKeyboardMarkup()
 	markup.add(
@@ -106,6 +107,7 @@ def create_workout_answer_markup():
 	return markup
 
 
+# the markup that appears on "Which workout would you like to view?"
 def list_workouts_markup(workout_ids, comes_from=None):
 	markup = InlineKeyboardMarkup()
 	for workout_id in workout_ids:
@@ -118,7 +120,21 @@ def list_workouts_markup(workout_ids, comes_from=None):
 	return markup
 
 
-# number pad used to record reps
+def view_workout_details_markup(workout_ids):
+	markup = InlineKeyboardMarkup()
+	for workout_id in workout_ids:
+		workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
+		markup.add(InlineKeyboardButton(workout_title, callback_data=f"VIEW_WORKOUT:{workout_id}"))
+	return markup
+
+
+def return_to_view_workout_details_markup():
+	markup = InlineKeyboardMarkup()
+	markup.add(InlineKeyboardButton("Go back", callback_data="list_workouts_for_workout_details"))
+	return markup
+
+
+# User uses this keyboard to store their reps after each set
 def number_pad_markup():
 	number_pad = ReplyKeyboardMarkup(
 		resize_keyboard=False,
@@ -192,6 +208,9 @@ def handle_callback_query(call):
 	elif call.data == "exercise_added":
 		exercise_added(call)
 
+	elif call.data == "list_workouts_for_workout_details":
+		handle_view_workout(call)
+
 	elif call.data.startswith("START_WORKOUT:"):
 		WORKOUT_ID = call.data.replace("START_WORKOUT:", "")
 		temp_workout = [w for w in USER.saved_workouts if w.id == WORKOUT_ID][0]
@@ -223,6 +242,10 @@ def handle_callback_query(call):
 		workout_id = call.data.replace("ABORT_DELETE_WORKOUT:", "")
 		workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
 		send_edited_message(f"Gotcha! Will not delete {workout_title}.", call.message.id)
+
+	elif call.data.startswith("VIEW_WORKOUT:"):
+		workout_id = call.data.replace("VIEW_WORKOUT:", "")
+		show_workout_details(call, workout_id)
 
 
 # handle /start command
@@ -351,6 +374,14 @@ def handle_delete_workout(message):
 		send_message(message_text, reply_markup=delete_workout_markup(workout_ids))
 	else:
 		send_message("You don't have any stored workouts.")
+
+
+@BOT.message_handler(commands=["view"])
+def view_workout(message):
+	MESSAGES.append(message)
+	remove_inline_replies()
+
+	handle_view_workout()
 
 
 # only if bot is expecting user input
@@ -634,6 +665,31 @@ def delete_workout(call, workout_id):
 	send_edited_message(
 		f"Are you sure you want to delete {workout_title}?",
 		call.message.id, reply_markup=delete_workout_confirmation_markup(workout_id))
+
+
+def handle_view_workout(call=None):
+	if USER.saved_workouts:
+		workout_ids = [w.id for w in USER.saved_workouts]
+		if call:
+			send_edited_message(
+				"Which workout would you like to view?",
+				call.message.id,
+				reply_markup=view_workout_details_markup(workout_ids))
+		else:
+			send_message(
+				"Which workout would you like to view?",
+				reply_markup=view_workout_details_markup(workout_ids))
+	else:
+		send_message("You don't have any stored workouts.")
+
+
+def show_workout_details(call, workout_id):
+	workout = [w for w in USER.saved_workouts if w.id == workout_id][0]
+	send_edited_message(
+		str(workout),
+		call.message.id,
+		parse_mode="MarkdownV2",
+		reply_markup=return_to_view_workout_details_markup())
 
 
 def remove_inline_replies():
