@@ -274,8 +274,19 @@ def initialize(message):
 
 @BOT.message_handler(commands=["begin"])
 def begin_workout(message):
+	MESSAGES.append(message)
 	remove_inline_replies()
+	reset_state()
 	choose_workout()
+
+
+@BOT.message_handler(commands=["create"])
+def create_workout(message):
+	MESSAGES.append(message)
+	remove_inline_replies()
+	reset_state()
+
+	get_workout_title_from_input()
 
 
 def show_start_options(is_new_user=False, call=None):
@@ -505,11 +516,16 @@ def get_workout_title_from_input(call=None, message=None):
 	"""
 	global WAITING_FOR_INPUT, WAITING_FOR_WORKOUT_TITLE
 
-	if not message and call:
+	if not message:
 		message_text = '''New workout\n\nWhat would you like to name your workout?'''
-		send_edited_message(message_text, call.message.id)
+		if call:
+			send_edited_message(message_text, call.message.id)
+		else:
+			send_message(message_text)
+
 		WAITING_FOR_INPUT = True
 		WAITING_FOR_WORKOUT_TITLE = True
+
 	else:
 		# received input, set global flags back to false
 		WAITING_FOR_INPUT = False
