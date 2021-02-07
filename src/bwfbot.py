@@ -36,7 +36,15 @@ global \
 	WAITING_FOR_MUSCLES_WORKED, \
 	WAITING_FOR_SETUP_DONE, \
 	WAITING_FOR_REP_COUNT, \
-	CURRENT_EXERCISE_INDEX
+	CURRENT_EXERCISE_INDEX, \
+	RESET_STATE
+
+
+def confirm_reset_state():
+	send_message(
+		"Performing this action will cancel the running workout. Are you sure you want to continue?",
+		reply_markup=reset_state_answer_markup()
+	)
 
 
 def reset_state():
@@ -53,7 +61,8 @@ def reset_state():
 		WAITING_FOR_MUSCLES_WORKED, \
 		WAITING_FOR_SETUP_DONE, \
 		WAITING_FOR_REP_COUNT, \
-		CURRENT_EXERCISE_INDEX
+		CURRENT_EXERCISE_INDEX, \
+		RESET_STATE
 
 	WAITING_FOR_INPUT = False
 
@@ -70,6 +79,8 @@ def reset_state():
 
 	WAITING_FOR_REP_COUNT = False
 	CURRENT_EXERCISE_INDEX = 0
+
+	RESET_STATE = False
 
 # ----------------- MARKUPS --------------------
 
@@ -170,6 +181,15 @@ def delete_workout_confirmation_markup(workout_id):
 	return markup
 
 
+def reset_state_answer_markup():
+	markup = InlineKeyboardMarkup()
+	markup.add(
+		InlineKeyboardButton("Yes", callback_data="RESET_STATE:YES"),
+		InlineKeyboardButton("No", callback_data="RESET_STATE:NO"),
+	)
+	return markup
+
+
 # ----------------- HANDLERS --------------------
 @BOT.callback_query_handler(func=lambda call: True)
 def handle_callback_query(call):
@@ -179,7 +199,8 @@ def handle_callback_query(call):
 	"""
 	global \
 		WORKOUT_INDEX, \
-		WORKOUT_ID
+		WORKOUT_ID, \
+		RESET_STATE
 
 	if call.data == "choose_workouts":
 		choose_workout(call=call)
@@ -247,20 +268,35 @@ def handle_callback_query(call):
 		workout_id = call.data.replace("VIEW_WORKOUT:", "")
 		show_workout_details(call, workout_id)
 
+	elif call.data.startswith("RESET_STATE:"):
+		answer = call.data.replace("RESET_STATE:", "")
+		RESET_STATE = True if answer == "YES" else False
+		if RESET_STATE:
+			send_edited_message(
+				"Done! The running workout has been cancelled.",
+				call.message.id)
+			send_message("Please resend your command.", reply_markup=ReplyKeyboardRemove())
+		else:
+			send_edited_message("Okay, I'll not cancel the running workout.", call.message.id)
+
 
 # handle /start command
 @BOT.message_handler(commands=["start"])
 def initialize(message):
 	global USER
 	global CHAT_ID
+	global RESET_STATE
+	global WORKOUT
+
+	MESSAGES.append(message)
+	remove_inline_replies()
+
+	if WORKOUT.running and not RESET_STATE:
+		confirm_reset_state()
+		return
 
 	# reset application state for every new session
 	reset_state()
-
-	# in order to prevent any confusion, remove any inline reply markups that might cause problems
-	remove_inline_replies()
-
-	MESSAGES.append(message)
 
 	CHAT_ID = message.chat.id
 	# TODO: USER = get_user_from_id(message.from_user.id)
@@ -276,6 +312,11 @@ def initialize(message):
 def begin_workout(message):
 	MESSAGES.append(message)
 	remove_inline_replies()
+
+	if WORKOUT.running and not RESET_STATE:
+		confirm_reset_state()
+		return
+
 	reset_state()
 	choose_workout()
 
@@ -284,24 +325,14 @@ def begin_workout(message):
 def create_workout(message):
 	MESSAGES.append(message)
 	remove_inline_replies()
+
+	if WORKOUT.running and not RESET_STATE:
+		confirm_reset_state()
+		return
+
 	reset_state()
 
 	get_workout_title_from_input()
-
-
-def show_start_options(is_new_user=False, call=None):
-
-	if call:
-		message_text = \
-			"What can I help you with?\n\n" \
-			"Type '/' to see all commands you can give me."
-		send_edited_message(message_text, call.message.id, reply_markup=start_options_markup())
-	else:
-		message_text = f'''
-				{"Welcome" if is_new_user else "Welcome back"}, {USER.first_name}. What would you like to do today?
-				\nType '/' to see all commands you can give me.'''
-
-		send_message(message_text.strip(), reply_markup=start_options_markup())
 
 
 # handle /next command
@@ -345,7 +376,7 @@ def finish(message):
 
 	if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.exercises) - 1:
 		# user is done with their workout. End workout and add it to their completed workouts
-		WORKOUT.started = False
+		WORKOUT.running = False
 		USER.completed_workouts.append(WORKOUT)
 
 		# reset exercise index
@@ -364,7 +395,11 @@ def clear_dialog(message):
 	global MESSAGES
 
 	MESSAGES.append(message)
-	# reset application state if history is cleared, in order to prevent any confusion
+
+	if WORKOUT.running and not RESET_STATE:
+		confirm_reset_state()
+		return
+
 	reset_state()
 
 	send_message("Clearing chat...")
@@ -377,8 +412,11 @@ def clear_dialog(message):
 @BOT.message_handler(commands=["delete"])
 def handle_delete_workout(message):
 	MESSAGES.append(message)
-	# in order to prevent any confusion, remove any inline reply markups that might cause problems
 	remove_inline_replies()
+
+	if WORKOUT.running and not RESET_STATE:
+		confirm_reset_state()
+		return
 
 	reset_state()
 
@@ -433,6 +471,19 @@ def handle_user_input(message):
 
 
 # ----------------- FUNCTIONS ------------------
+
+def show_start_options(is_new_user=False, call=None):
+	if call:
+		message_text = \
+			"What can I help you with?\n\n" \
+			"Type '/' to see all commands you can give me."
+		send_edited_message(message_text, call.message.id, reply_markup=start_options_markup())
+	else:
+		message_text = f'''
+				{"Welcome" if is_new_user else "Welcome back"}, {USER.first_name}. What would you like to do today?
+				\nType '/' to see all commands you can give me.'''
+
+		send_message(message_text.strip(), reply_markup=start_options_markup())
 
 
 def send_message(message_text, reply_markup=None, parse_mode=""):
@@ -642,12 +693,12 @@ def do_workout(new_rep_entry=False, message=None):
 		WAITING_FOR_REP_COUNT, \
 		WAITING_FOR_INPUT
 
-	if not WORKOUT.started:
+	if not WORKOUT.running:
 		# only happens once (when the workout gets started initially)
 		WORKOUT = deepcopy([w for w in USER.saved_workouts if w.id == WORKOUT_ID][0])
 		# give the new workout a new id
 		WORKOUT.id = str(uuid4())
-		WORKOUT.started = True
+		WORKOUT.running = True
 
 	# create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
 	exercises_in_workout = WORKOUT.exercises
@@ -727,6 +778,7 @@ def show_workout_details(call, workout_id):
 
 
 def remove_inline_replies():
+	# since user interaction has proceeded, remove any previous inline reply markups.
 	for ix, message in enumerate(MESSAGES):
 		if type(message.reply_markup) is InlineKeyboardMarkup:
 			send_edited_message(message.text, message.id, reply_markup=None)

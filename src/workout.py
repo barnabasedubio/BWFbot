@@ -16,7 +16,7 @@ class Workout:
 		self.running = False
 		self.saves = 0
 		self.exercises = []
-		self.started = False
+		self.running = False
 
 	def __str__(self):
 		title_string = f"*{self.title}*\n\n"
