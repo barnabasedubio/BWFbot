@@ -12,6 +12,7 @@ from exercise import Exercise
 from workout import Workout
 
 from copy import deepcopy
+from uuid import uuid4
 
 # configuration
 with open("../token.txt", "r", encoding="utf8") as fp:
@@ -23,22 +24,19 @@ USER = User()
 CHAT_ID = None
 MESSAGES = []
 
-# state variables
-WAITING_FOR_INPUT = False
-
-WORKOUT = Workout()
-WORKOUT_INDEX = None
-WORKOUT_TITLE = ""
-WAITING_FOR_WORKOUT_TITLE = False
-
-EXERCISE = Exercise()
-WAITING_FOR_EXERCISE_NAME = False
-WAITING_FOR_EXERCISE_VIDEO_LINK = False
-WAITING_FOR_MUSCLES_WORKED = False
-WAITING_FOR_SETUP_DONE = False
-
-WAITING_FOR_REP_COUNT = False
-CURRENT_EXERCISE_INDEX = 0
+global \
+	WAITING_FOR_INPUT, \
+	WORKOUT, \
+	WORKOUT_INDEX, \
+	WORKOUT_ID, \
+	WAITING_FOR_WORKOUT_TITLE, \
+	EXERCISE, \
+	WAITING_FOR_EXERCISE_NAME, \
+	WAITING_FOR_EXERCISE_VIDEO_LINK, \
+	WAITING_FOR_MUSCLES_WORKED, \
+	WAITING_FOR_SETUP_DONE, \
+	WAITING_FOR_REP_COUNT, \
+	CURRENT_EXERCISE_INDEX
 
 
 def reset_state():
@@ -47,7 +45,7 @@ def reset_state():
 		WAITING_FOR_INPUT, \
 		WORKOUT, \
 		WORKOUT_INDEX, \
-		WORKOUT_TITLE, \
+		WORKOUT_ID, \
 		WAITING_FOR_WORKOUT_TITLE, \
 		EXERCISE, \
 		WAITING_FOR_EXERCISE_NAME, \
@@ -61,7 +59,7 @@ def reset_state():
 
 	WORKOUT = Workout()
 	WORKOUT_INDEX = None
-	WORKOUT_TITLE = ""
+	WORKOUT_ID = -1
 	WAITING_FOR_WORKOUT_TITLE = False
 
 	EXERCISE = Exercise()
@@ -108,10 +106,11 @@ def create_workout_answer_markup():
 	return markup
 
 
-def list_workouts_markup(workout_titles, comes_from=None):
+def list_workouts_markup(workout_ids, comes_from=None):
 	markup = InlineKeyboardMarkup()
-	for workout_title in workout_titles:
-		markup.add(InlineKeyboardButton(workout_title, callback_data=f"START_WORKOUT:{workout_title}"))
+	for workout_id in workout_ids:
+		workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
+		markup.add(InlineKeyboardButton(workout_title, callback_data=f"START_WORKOUT:{workout_id}"))
 	if comes_from == "add_another_exercise":
 		markup.add(InlineKeyboardButton("Go back", callback_data="exercise_added"))
 	else:
@@ -138,18 +137,19 @@ def start_options_markup():
 	return markup
 
 
-def delete_workout_markup(workout_titles):
+def delete_workout_markup(workout_ids):
 	markup = InlineKeyboardMarkup()
-	for workout_title in workout_titles:
-		markup.add(InlineKeyboardButton(workout_title, callback_data=f"DELETE_WORKOUT:{workout_title}"))
+	for workout_id in workout_ids:
+		workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
+		markup.add(InlineKeyboardButton(workout_title, callback_data=f"DELETE_WORKOUT:{workout_id}"))
 	return markup
 
 
-def delete_workout_confirmation_markup(workout_title):
+def delete_workout_confirmation_markup(workout_id):
 	markup = InlineKeyboardMarkup()
 	markup.add(
-		InlineKeyboardButton("Yes", callback_data=f"CONFIRM_DELETE_WORKOUT:{workout_title}"),
-		InlineKeyboardButton("No", callback_data=f"ABORT_DELETE_WORKOUT:{workout_title}")
+		InlineKeyboardButton("Yes", callback_data=f"CONFIRM_DELETE_WORKOUT:{workout_id}"),
+		InlineKeyboardButton("No", callback_data=f"ABORT_DELETE_WORKOUT:{workout_id}")
 	)
 	return markup
 
@@ -161,7 +161,9 @@ def handle_callback_query(call):
 	handles all inline keyboard responses
 	:param call
 	"""
-	global WORKOUT_TITLE, WORKOUT_INDEX
+	global \
+		WORKOUT_INDEX, \
+		WORKOUT_ID
 
 	if call.data == "choose_workouts":
 		choose_workout(call=call)
@@ -191,10 +193,8 @@ def handle_callback_query(call):
 		exercise_added(call)
 
 	elif call.data.startswith("START_WORKOUT:"):
-		workout_title = call.data.replace("START_WORKOUT:", "")
-		WORKOUT_TITLE = workout_title
-
-		temp_workout = [w for w in USER.saved_workouts if w.title == WORKOUT_TITLE][0]
+		WORKOUT_ID = call.data.replace("START_WORKOUT:", "")
+		temp_workout = [w for w in USER.saved_workouts if w.id == WORKOUT_ID][0]
 		WORKOUT_INDEX = USER.saved_workouts.index(temp_workout)
 
 		if temp_workout.exercises:
@@ -202,24 +202,27 @@ def handle_callback_query(call):
 			do_workout()
 		else:
 			send_edited_message(
-				f"{WORKOUT_TITLE} has no exercises. Do you want to add some?",
+				f"{temp_workout.title} has no exercises. Do you want to add some?",
 				call.message.id,
 				reply_markup=add_exercise_markup())
 
 	elif call.data.startswith("DELETE_WORKOUT:"):
-		workout_title = call.data.replace("DELETE_WORKOUT:", "")
-		WORKOUT_TITLE = workout_title
-		delete_workout(call=call, workout_title=workout_title)
+		WORKOUT_ID = call.data.replace("DELETE_WORKOUT:", "")
+		delete_workout(call=call, workout_id=WORKOUT_ID)
 
 	elif call.data.startswith("CONFIRM_DELETE_WORKOUT:"):
+		WORKOUT_ID = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
+		workout_title = [w.title for w in USER.saved_workouts if w.id == WORKOUT_ID][0]
 		if len(USER.saved_workouts) == 1:
 			USER.saved_workouts = []
 		else:
-			USER.saved_workouts = [w for w in USER.saved_workouts if w.title != WORKOUT_TITLE]
-		send_edited_message(f"Done! {WORKOUT_TITLE} is gone from your saved workouts.", call.message.id)
+			USER.saved_workouts = [w for w in USER.saved_workouts if w.id != WORKOUT_ID]
+		send_edited_message(f"Done! {workout_title} is gone from your saved workouts.", call.message.id)
 
 	elif call.data.startswith("ABORT_DELETE_WORKOUT:"):
-		send_edited_message(f"Gotcha! Will not delete {WORKOUT_TITLE}.", call.message.id)
+		workout_id = call.data.replace("ABORT_DELETE_WORKOUT:", "")
+		workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
+		send_edited_message(f"Gotcha! Will not delete {workout_title}.", call.message.id)
 
 
 # handle /start command
@@ -340,12 +343,12 @@ def handle_delete_workout(message):
 	reset_state()
 
 	if USER.saved_workouts:
-		workout_titles = [w.title for w in USER.saved_workouts]
+		workout_ids = [w.id for w in USER.saved_workouts]
 		message_text = \
 			"Which workout would you like to delete?\n\n" \
 			"(Note: this doesn't affect your already completed workouts, so no worries)"
 
-		send_message(message_text, reply_markup=delete_workout_markup(workout_titles))
+		send_message(message_text, reply_markup=delete_workout_markup(workout_ids))
 	else:
 		send_message("You don't have any stored workouts.")
 
@@ -420,13 +423,13 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 def choose_workout(call, comes_from=None):
 	if USER.saved_workouts:
 		# display a list of all stored user workouts
-		workout_titles = [workout.title for workout in USER.saved_workouts]
+		workout_ids = [workout.id for workout in USER.saved_workouts]
 		message_text = "Which workout routine would you like to start?"
 
 		if comes_from == "add_another_exercise":
-			reply_markup = list_workouts_markup(workout_titles, comes_from="add_another_exercise")
+			reply_markup = list_workouts_markup(workout_ids, comes_from="add_another_exercise")
 		else:
-			reply_markup = list_workouts_markup(workout_titles)
+			reply_markup = list_workouts_markup(workout_ids)
 
 		send_edited_message(
 			message_text,
@@ -459,15 +462,10 @@ def get_workout_title_from_input(call=None, message=None):
 		WAITING_FOR_INPUT = True
 		WAITING_FOR_WORKOUT_TITLE = True
 	else:
-		if [w for w in USER.saved_workouts if w.title == message.text]:
-			send_message(f"{message.text} already exists in your saved workouts. Could you please choose another name?")
-			WAITING_FOR_INPUT = True
-			WAITING_FOR_WORKOUT_TITLE = True
-		else:
-			# received input, set global flags back to false
-			WAITING_FOR_INPUT = False
-			WAITING_FOR_WORKOUT_TITLE = False
-			set_workout(message)
+		# received input, set global flags back to false
+		WAITING_FOR_INPUT = False
+		WAITING_FOR_WORKOUT_TITLE = False
+		set_workout(message)
 
 
 def set_workout(message):
@@ -581,11 +579,10 @@ def do_workout(new_rep_entry=False, message=None):
 
 	if not WORKOUT.started:
 		# only happens once (when the workout gets started initially)
-		WORKOUT = deepcopy([w for w in USER.saved_workouts if w.title == WORKOUT_TITLE][0])
-		if not WORKOUT.exercises:  # display empty workout message
-			pass
-		else:
-			WORKOUT.started = True
+		WORKOUT = deepcopy([w for w in USER.saved_workouts if w.id == WORKOUT_ID][0])
+		# give the new workout a new id
+		WORKOUT.id = str(uuid4())
+		WORKOUT.started = True
 
 	# create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
 	exercises_in_workout = WORKOUT.exercises
@@ -632,10 +629,11 @@ def workout_completed():
 	send_message(report, reply_markup=ReplyKeyboardRemove(), parse_mode="MarkdownV2")
 
 
-def delete_workout(call, workout_title):
+def delete_workout(call, workout_id):
+	workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
 	send_edited_message(
 		f"Are you sure you want to delete {workout_title}?",
-		call.message.id, reply_markup=delete_workout_confirmation_markup(workout_title))
+		call.message.id, reply_markup=delete_workout_confirmation_markup(workout_id))
 
 
 def remove_inline_replies():
@@ -660,4 +658,6 @@ def send_report():
 	pass
 
 
-BOT.polling()
+if __name__ == "__main__":
+	reset_state()
+	BOT.polling()
