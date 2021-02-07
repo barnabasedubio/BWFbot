@@ -272,6 +272,12 @@ def initialize(message):
 	show_start_options(is_new_user)
 
 
+@BOT.message_handler(commands=["begin"])
+def begin_workout(message):
+	remove_inline_replies()
+	choose_workout()
+
+
 def show_start_options(is_new_user=False, call=None):
 
 	if call:
@@ -451,7 +457,7 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 								parse_mode=parse_mode)
 
 
-def choose_workout(call, comes_from=None):
+def choose_workout(call=None, comes_from=None):
 	if USER.saved_workouts:
 		# display a list of all stored user workouts
 		workout_ids = [workout.id for workout in USER.saved_workouts]
@@ -462,16 +468,28 @@ def choose_workout(call, comes_from=None):
 		else:
 			reply_markup = list_workouts_markup(workout_ids)
 
-		send_edited_message(
-			message_text,
-			call.message.id,
-			reply_markup=reply_markup)
+		if call:
+			send_edited_message(
+				message_text,
+				call.message.id,
+				reply_markup=reply_markup)
+		else:
+			send_message(
+				message_text,
+				reply_markup=reply_markup
+			)
 	else:
-		message_text = "You don't have any stored workouts. Would you like to create a new one?"
-		send_edited_message(
-			message_text,
-			call.message.id,
-			reply_markup=create_workout_answer_markup())
+		if call:
+			message_text = "You don't have any stored workouts. Would you like to create a new one?"
+			send_edited_message(
+				message_text,
+				call.message.id,
+				reply_markup=create_workout_answer_markup())
+		else:
+			message_text = "You don't have any stored workouts. Would you like to create a new one?"
+			send_message(
+				message_text,
+				reply_markup=create_workout_answer_markup())
 
 
 def get_workout_title_from_input(call=None, message=None):
