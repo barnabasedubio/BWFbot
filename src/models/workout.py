@@ -12,7 +12,7 @@ class Workout:
 		self.id = str(uuid4())
 		self.title = title
 		self.created_by = created_by
-		self.length = 0
+		self.duration = 0
 		self.running = False
 		self.saves = 0
 		self.exercises = []
@@ -20,7 +20,7 @@ class Workout:
 
 	def __str__(self):
 		title_string = f"*{self.title}*\n\n"
-		length_string = f"_Duration: \\~ {self.length} minutes_\n"
+		length_string = f"_Duration: \\~ {self.duration} minutes_\n"
 		exercises_string = ""
 		if self.exercises:
 			exercises_string = f"\nExercises:\n\n"

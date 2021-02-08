@@ -1,7 +1,6 @@
 import telebot
 import requests
 import yaml
-import json
 import jsonpickle
 
 from models.user import User
@@ -648,7 +647,10 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 		elif message_type == "EXERCISE_MUSCLES_WORKED":
 			WAITING_FOR_MUSCLES_WORKED = False
 			if not skip_setting:
-				muscles_worked = [muscle.strip().capitalize() for muscle in message.text.split(",")]
+				# handle for empty entries (e.g ", , chest, ,")
+				muscles_worked = [x.strip() for x in message.text.split(",")]
+				muscles_worked = [x for x in muscles_worked if x]
+				muscles_worked = [muscle.strip().capitalize() for muscle in muscles_worked]
 				EXERCISE.muscles_worked = muscles_worked
 
 			# done. Add workout to users workouts.
@@ -773,31 +775,59 @@ def delete_workout(call, workout_id):
 
 
 def handle_view_workout(call=None):
-	global USER
 
-	if USER.saved_workouts:
+	user = get_user_from_database(USER_ID)[0]
+
+	if user['saved_workouts']:
 		if call:
 			send_edited_message(
 				"Which workout would you like to view?",
 				call.message.id,
-				reply_markup=view_workout_details_markup(USER.saved_workouts))
+				reply_markup=view_workout_details_markup(user['saved_workouts']))
 		else:
 			send_message(
 				"Which workout would you like to view?",
-				reply_markup=view_workout_details_markup(USER.saved_workouts))
+				reply_markup=view_workout_details_markup(user['saved_workouts']))
 	else:
 		send_message("You don't have any stored workouts.")
 
 
 def show_workout_details(call, workout_id):
-	global USER
 
-	workout = [w for w in USER.saved_workouts if w.id == workout_id][0]
+	user = get_user_from_database(USER_ID)[0]
+	workout = None
+	for node_id in user['saved_workouts']:
+		if user['saved_workouts'][node_id]['id'] == workout_id:
+			workout = user['saved_workouts'][node_id]
+
 	send_edited_message(
-		str(workout),
+		stringify_workout(workout),
 		call.message.id,
 		parse_mode="MarkdownV2",
 		reply_markup=return_to_view_workout_details_markup())
+
+
+def stringify_workout(workout):
+	result_string = f"*{workout['title']}*\n"
+	result_string += f"_Duration: \\~ {workout['length']} minutes_\n\n"
+	if workout.get('exercises'):
+		result_string += "_Exercises:_\n\n"
+		for node_id in workout['exercises']:
+			result_string += stringify_exercise(workout['exercises'][node_id]) + "\n"
+
+	return result_string
+
+
+def stringify_exercise(exercise):
+	result_string = f"*{exercise['name'].capitalize()}*\n"
+	if exercise.get('video_link'):
+		result_string += f"[Video demonstration]({exercise['video_link']})\n"
+	if exercise.get('muscles_worked'):
+		result_string += "_muscles worked_:\n"
+		for muscle in exercise['muscles_worked']:
+			result_string += "• " + muscle + "\n"
+
+	return result_string
 
 
 def remove_inline_replies():
