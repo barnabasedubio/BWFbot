@@ -1,4 +1,5 @@
 env
+local
 __pycache__
 .idea
-token.txt
+config.yml

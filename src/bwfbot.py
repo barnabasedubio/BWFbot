@@ -10,11 +10,13 @@ from markups import *
 from time import sleep
 from copy import deepcopy
 from uuid import uuid4
+from yaml import load, FullLoader
 
 # configuration
-with open("../token.txt", "r", encoding="utf8") as fp:
-	TOKEN = fp.read()
+with open("../config.yml", "r") as fp:
+	CONFIG = load(fp, FullLoader)
 
+TOKEN = CONFIG["telegram"]["token"]
 
 BOT = telebot.TeleBot(TOKEN)
 USER = User()
