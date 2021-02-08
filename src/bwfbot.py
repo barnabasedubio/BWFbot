@@ -22,6 +22,7 @@ DB_ROOT = CONFIG["firebase"]["reference"]
 
 BOT = telebot.TeleBot(TOKEN)
 USER_ID = None
+USER_NODE_ID = None  # firebase's id of the user
 CHAT_ID = None
 MESSAGES = []
 
@@ -97,7 +98,7 @@ def handle_callback_query(call):
 		RESET_STATE, \
 		USER_ID
 
-	user = get_user_from_database(USER_ID)
+	user = get_user_from_database(USER_ID)[0]
 
 	if call.data == "choose_workouts":
 		choose_workout(call=call)
@@ -124,7 +125,7 @@ def handle_callback_query(call):
 		show_start_options(call=call)
 
 	elif call.data == "exercise_added":
-		exercise_added(call)
+		exercise_added(call=call)
 
 	elif call.data == "list_workouts_for_workout_details":
 		handle_view_workout(call)
@@ -192,6 +193,7 @@ def initialize(message):
 	global RESET_STATE
 	global CHAT_ID
 	global USER_ID
+	global USER_NODE_ID
 
 	MESSAGES.append(message)
 	remove_inline_replies()
@@ -207,10 +209,10 @@ def initialize(message):
 	USER_ID = message.from_user.id
 
 	is_new_user = False
-	user = get_user_from_database(USER_ID)
+	user, USER_NODE_ID = get_user_from_database(USER_ID)
 	if not user:
 		is_new_user = True
-		user = add_user_to_database(USER_ID, message.from_user.first_name, message.from_user.last_name)
+		user, USER_NODE_ID = add_user_to_database(USER_ID, message.from_user.first_name, message.from_user.last_name)
 	show_start_options(is_new_user, username=user['first_name'])
 
 
@@ -417,15 +419,16 @@ def handle_user_input(message):
 
 def get_user_from_database(user_id):
 	global DB_ROOT
-
+	node_id = None
 	user = None
-	res = requests.get(DB_ROOT + "users.json")
+	res = requests.get(f"{DB_ROOT}/users.json")
 	if res.ok and res.text != "null":
 		users = res.json()
 		for uid in users:  # uid is the identifier firebase applies to every new node
 			user_object = users[uid]
 			if user_object["id"] == user_id:
 				user = user_object
+				node_id = uid
 				break
 
 	if user:
@@ -434,7 +437,7 @@ def get_user_from_database(user_id):
 		if "created_workouts" not in user:
 			user["created_workouts"] = {}
 
-	return user
+	return user, node_id
 
 
 def add_user_to_database(user_id, user_first_name, user_last_name):
@@ -443,7 +446,7 @@ def add_user_to_database(user_id, user_first_name, user_last_name):
 	new_user = User(user_id, user_first_name, user_last_name)
 	new_user_json = jsonpickle.encode(new_user, unpicklable=False)
 	print(new_user_json)
-	res = requests.post(DB_ROOT + "users.json", new_user_json)
+	res = requests.post(f"{DB_ROOT}/users.json", new_user_json)
 	print(res.status_code, res.text)
 	return get_user_from_database(user_id)
 
@@ -503,7 +506,7 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 
 def choose_workout(call=None, comes_from=None):
 
-	user = get_user_from_database(USER_ID)
+	user = get_user_from_database(USER_ID)[0]
 
 	if user['saved_workouts']:
 		message_text = "Which workout routine would you like to start?"
@@ -580,25 +583,19 @@ def set_workout(message):
 	new_workout = Workout(workout_title, message.from_user.id)
 
 	# append new workout to user's list of saved workouts
-	add_workout_to_database(USER_ID, new_workout)
+	add_workout_to_database(new_workout)
 
-	message_text = f'''New workout\n\n{workout_title} has been created! Now let's add some exercises.'''
-	send_message(message_text, reply_markup=add_exercise_markup())
+	message_text = \
+		f"New workout\n\n{workout_title} has been created! " \
+		f"Now let's add some exercises.\n\n" \
+		f"(Note: the order in which you add exercises will be the order in " \
+		f"which I'll display them during a workout.)"
+	send_message(message_text.strip(), reply_markup=add_exercise_markup())
 
 
-def add_workout_to_database(user_id, workout):
-	firebase_node_id = ""
-	res = requests.get(DB_ROOT + "users.json")
-	if res.ok and res.text != "null":
-		users = res.json()
-		for identifier in users:
-			if users[identifier]["id"] == user_id:
-				firebase_node_id = identifier
-				break
-
-	if firebase_node_id:
-		workout_json = jsonpickle.encode(workout, unpicklable=False)
-		requests.post(DB_ROOT + "users/" + firebase_node_id + "/saved_workouts.json", workout_json)
+def add_workout_to_database(workout):
+	workout_json = jsonpickle.encode(workout, unpicklable=False)
+	requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json", workout_json)
 
 
 def add_exercise(call=None, message=None, message_type="", skip_setting=False):
@@ -618,7 +615,7 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 		WAITING_FOR_EXERCISE_VIDEO_LINK, \
 		WAITING_FOR_MUSCLES_WORKED, \
 		WORKOUT_INDEX, \
-		USER
+		USER_ID
 
 	WAITING_FOR_INPUT = True
 
@@ -660,18 +657,30 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 			# default location to add exercise is the most recently added workout
 			# unless specified (WORKOUT_INDEX not None)
 			workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
-			USER.saved_workouts[workout_index].exercises.append(EXERCISE)
 
-			exercise_added()
+			add_exercise_to_database(EXERCISE, workout_index)
+
+
+def add_exercise_to_database(exercise, workout_index):
+	user = get_user_from_database(USER_ID)[0]
+	exercise_json = jsonpickle.encode(exercise, unpicklable=False)
+	workout_node_id = list(user['saved_workouts'])[workout_index]
+	res = requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises.json", exercise_json)
+	print(res.status_code, res.text)
+
+	exercise_added()
 
 
 def exercise_added(call=None):
 	global \
 		WORKOUT_INDEX, \
-		EXERCISE, \
-		USER
+		EXERCISE
+
+	user = get_user_from_database(USER_ID)[0]
 
 	workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
+	workout_node_id = list(user['saved_workouts'])[workout_index]
+
 	message_text = \
 		f"Exercise summary:\n\n" \
 		f"{str(EXERCISE)}\n"
@@ -681,7 +690,7 @@ def exercise_added(call=None):
 		send_message(message_text, parse_mode="MarkdownV2")
 
 	confirmation = \
-		f"Added {EXERCISE.name} to {USER.saved_workouts[workout_index].title}!\n" \
+		f"Added {EXERCISE.name} to {user['saved_workouts'][workout_node_id]['title']}!\n" \
 		f"Would you like to add another exercise?"
 
 	send_message(confirmation, reply_markup=add_another_exercise_markup())
