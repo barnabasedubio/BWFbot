@@ -475,7 +475,7 @@ def get_workout_title_from_input(call=None, message=None):
 
 def set_workout(message):
 	"""
-
+	create a new workout
 	:param message:
 	:return:
 	"""
@@ -572,7 +572,7 @@ def exercise_added(call=None):
 
 def do_workout(new_rep_entry=False, message=None):
 	"""
-
+	start workout
 	:param new_rep_entry:
 	:param message:
 	:return:
