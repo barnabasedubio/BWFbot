@@ -1,16 +1,13 @@
 import telebot
-import time
 
-from telebot.types import \
-	InlineKeyboardMarkup, \
-	InlineKeyboardButton, \
-	ReplyKeyboardMarkup, \
-	ReplyKeyboardRemove
+from telebot.types import ReplyKeyboardRemove
 
-from user import User
-from exercise import Exercise
-from workout import Workout
+from models.user import User
+from models.exercise import Exercise
+from models.workout import Workout
+from markups import *
 
+from time import sleep
 from copy import deepcopy
 from uuid import uuid4
 
@@ -81,113 +78,6 @@ def reset_state():
 	CURRENT_EXERCISE_INDEX = 0
 
 	RESET_STATE = False
-
-# ----------------- MARKUPS --------------------
-
-
-def add_exercise_markup():
-	markup = InlineKeyboardMarkup()
-	markup.add(InlineKeyboardButton("Add exercise", callback_data="add_exercise"))
-	return markup
-
-
-def add_another_exercise_markup():
-	markup = InlineKeyboardMarkup()
-	markup.add(InlineKeyboardButton("Add another exercise", callback_data="add_exercise"))
-	markup.add(InlineKeyboardButton("Start workout", callback_data="exercise_menu:choose_workouts"))
-	markup.add(InlineKeyboardButton("Go to main menu", callback_data="start_menu"))
-	return markup
-
-
-def explore_community_workouts_answer_markup():
-	markup = InlineKeyboardMarkup()
-	markup.add(
-		InlineKeyboardButton("Yes", callback_data="explore_community"),
-		InlineKeyboardButton("No", callback_data="start_menu"),
-	)
-	return markup
-
-
-# the markup that appears on "You do not have any stored workouts. Would you like to create one?"
-def create_workout_answer_markup():
-	markup = InlineKeyboardMarkup()
-	markup.add(
-		InlineKeyboardButton("Yes", callback_data="create_workout"),
-		InlineKeyboardButton("No", callback_data="request_community"),
-	)
-	return markup
-
-
-# the markup that appears on "Which workout would you like to view?"
-def list_workouts_markup(workout_ids, comes_from=None):
-	markup = InlineKeyboardMarkup()
-	for workout_id in workout_ids:
-		workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
-		markup.add(InlineKeyboardButton(workout_title, callback_data=f"START_WORKOUT:{workout_id}"))
-	if comes_from == "add_another_exercise":
-		markup.add(InlineKeyboardButton("Go back", callback_data="exercise_added"))
-	else:
-		markup.add(InlineKeyboardButton("Go back", callback_data="start_menu"))
-	return markup
-
-
-def view_workout_details_markup(workout_ids):
-	markup = InlineKeyboardMarkup()
-	for workout_id in workout_ids:
-		workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
-		markup.add(InlineKeyboardButton(workout_title, callback_data=f"VIEW_WORKOUT:{workout_id}"))
-	return markup
-
-
-def return_to_view_workout_details_markup():
-	markup = InlineKeyboardMarkup()
-	markup.add(InlineKeyboardButton("Go back", callback_data="list_workouts_for_workout_details"))
-	return markup
-
-
-# User uses this keyboard to store their reps after each set
-def number_pad_markup():
-	number_pad = ReplyKeyboardMarkup(
-		resize_keyboard=False,
-		one_time_keyboard=False
-	)
-	# * operator: spread the entries
-	number_pad.add(*[str(x) for x in range(1, 16)])
-	return number_pad
-
-
-def start_options_markup():
-	markup = InlineKeyboardMarkup()
-	markup.add(InlineKeyboardButton("Start one of my workouts", callback_data="choose_workouts"))
-	markup.add(InlineKeyboardButton("Create a new workout", callback_data="create_workout"))
-	markup.add(InlineKeyboardButton("Explore the community", callback_data="explore_community"))
-	return markup
-
-
-def delete_workout_markup(workout_ids):
-	markup = InlineKeyboardMarkup()
-	for workout_id in workout_ids:
-		workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
-		markup.add(InlineKeyboardButton(workout_title, callback_data=f"DELETE_WORKOUT:{workout_id}"))
-	return markup
-
-
-def delete_workout_confirmation_markup(workout_id):
-	markup = InlineKeyboardMarkup()
-	markup.add(
-		InlineKeyboardButton("Yes", callback_data=f"CONFIRM_DELETE_WORKOUT:{workout_id}"),
-		InlineKeyboardButton("No", callback_data=f"ABORT_DELETE_WORKOUT:{workout_id}")
-	)
-	return markup
-
-
-def reset_state_answer_markup():
-	markup = InlineKeyboardMarkup()
-	markup.add(
-		InlineKeyboardButton("Yes", callback_data="RESET_STATE:YES"),
-		InlineKeyboardButton("No", callback_data="RESET_STATE:NO"),
-	)
-	return markup
 
 
 # ----------------- HANDLERS --------------------
@@ -403,7 +293,7 @@ def clear_dialog(message):
 	reset_state()
 
 	send_message("Clearing chat...")
-	time.sleep(1.5)
+	sleep(1.5)
 	while MESSAGES:
 		BOT.delete_message(CHAT_ID, MESSAGES[0].id)
 		MESSAGES = MESSAGES[1:]
@@ -421,12 +311,11 @@ def handle_delete_workout(message):
 	reset_state()
 
 	if USER.saved_workouts:
-		workout_ids = [w.id for w in USER.saved_workouts]
 		message_text = \
 			"Which workout would you like to delete?\n\n" \
 			"(Note: this doesn't affect your already completed workouts, so no worries)"
 
-		send_message(message_text, reply_markup=delete_workout_markup(workout_ids))
+		send_message(message_text, reply_markup=delete_workout_markup(USER.saved_workouts))
 	else:
 		send_message("You don't have any stored workouts.")
 
@@ -521,14 +410,12 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 
 def choose_workout(call=None, comes_from=None):
 	if USER.saved_workouts:
-		# display a list of all stored user workouts
-		workout_ids = [workout.id for workout in USER.saved_workouts]
 		message_text = "Which workout routine would you like to start?"
 
 		if comes_from == "add_another_exercise":
-			reply_markup = list_workouts_markup(workout_ids, comes_from="add_another_exercise")
+			reply_markup = list_workouts_markup(USER.saved_workouts, comes_from="add_another_exercise")
 		else:
-			reply_markup = list_workouts_markup(workout_ids)
+			reply_markup = list_workouts_markup(USER.saved_workouts)
 
 		if call:
 			send_edited_message(
@@ -754,16 +641,15 @@ def delete_workout(call, workout_id):
 
 def handle_view_workout(call=None):
 	if USER.saved_workouts:
-		workout_ids = [w.id for w in USER.saved_workouts]
 		if call:
 			send_edited_message(
 				"Which workout would you like to view?",
 				call.message.id,
-				reply_markup=view_workout_details_markup(workout_ids))
+				reply_markup=view_workout_details_markup(USER.saved_workouts))
 		else:
 			send_message(
 				"Which workout would you like to view?",
-				reply_markup=view_workout_details_markup(workout_ids))
+				reply_markup=view_workout_details_markup(USER.saved_workouts))
 	else:
 		send_message("You don't have any stored workouts.")
 
@@ -780,7 +666,7 @@ def show_workout_details(call, workout_id):
 def remove_inline_replies():
 	# since user interaction has proceeded, remove any previous inline reply markups.
 	for ix, message in enumerate(MESSAGES):
-		if type(message.reply_markup) is InlineKeyboardMarkup:
+		if type(message.reply_markup) is telebot.types.InlineKeyboardMarkup:
 			send_edited_message(message.text, message.id, reply_markup=None)
 
 
