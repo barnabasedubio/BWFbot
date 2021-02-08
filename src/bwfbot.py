@@ -175,10 +175,11 @@ def handle_callback_query(call):
 # handle /start command
 @BOT.message_handler(commands=["start"])
 def initialize(message):
-	global USER
-	global CHAT_ID
-	global RESET_STATE
+	global MESSAGES
 	global WORKOUT
+	global RESET_STATE
+	global CHAT_ID
+	global USER
 
 	MESSAGES.append(message)
 	remove_inline_replies()
@@ -202,6 +203,10 @@ def initialize(message):
 
 @BOT.message_handler(commands=["begin"])
 def begin_workout(message):
+	global \
+		MESSAGES, \
+		WORKOUT
+
 	MESSAGES.append(message)
 	remove_inline_replies()
 
@@ -215,6 +220,11 @@ def begin_workout(message):
 
 @BOT.message_handler(commands=["create"])
 def create_workout(message):
+	global \
+		MESSAGES, \
+		WORKOUT, \
+		RESET_STATE
+
 	MESSAGES.append(message)
 	remove_inline_replies()
 
@@ -237,7 +247,13 @@ def proceed_to_next(message):
 	can be handled fairly straightforwardly
 	:param message
 	"""
-	global CURRENT_EXERCISE_INDEX
+	global \
+		MESSAGES, \
+		WAITING_FOR_EXERCISE_VIDEO_LINK, \
+		WAITING_FOR_MUSCLES_WORKED,\
+		WAITING_FOR_REP_COUNT, \
+		WORKOUT,\
+		CURRENT_EXERCISE_INDEX
 
 	MESSAGES.append(message)
 
@@ -260,9 +276,12 @@ def proceed_to_next(message):
 @BOT.message_handler(commands=["done"])
 def finish(message):
 	global \
-		WAITING_FOR_INPUT, \
+		MESSAGES, \
 		WAITING_FOR_REP_COUNT, \
-		CURRENT_EXERCISE_INDEX
+		CURRENT_EXERCISE_INDEX, \
+		WORKOUT, \
+		USER, \
+		WAITING_FOR_INPUT
 
 	MESSAGES.append(message)
 
@@ -284,7 +303,10 @@ def finish(message):
 # handle clear request
 @BOT.message_handler(commands=["clear"])
 def clear_dialog(message):
-	global MESSAGES
+	global \
+		MESSAGES, \
+		WORKOUT, \
+		RESET_STATE
 
 	MESSAGES.append(message)
 
@@ -297,12 +319,19 @@ def clear_dialog(message):
 	send_message("Clearing chat...")
 	sleep(1.5)
 	while MESSAGES:
+		# TODO: handle for messages older than 24 hours
 		BOT.delete_message(CHAT_ID, MESSAGES[0].id)
 		MESSAGES = MESSAGES[1:]
 
 
 @BOT.message_handler(commands=["delete"])
 def handle_delete_workout(message):
+	global \
+		MESSAGES, \
+		WORKOUT, \
+		RESET_STATE, \
+		USER
+
 	MESSAGES.append(message)
 	remove_inline_replies()
 
@@ -324,9 +353,10 @@ def handle_delete_workout(message):
 
 @BOT.message_handler(commands=["view"])
 def view_workout(message):
+	global MESSAGES
+
 	MESSAGES.append(message)
 	remove_inline_replies()
-
 	handle_view_workout()
 
 
@@ -337,9 +367,17 @@ def handle_user_input(message):
 	"""
 	handles actual user input written to chat.
 	similar to func proceed_to_next(), the context is derived from the global variables
-	:param message:
-	:return:
+	:param message
 	"""
+	global \
+		MESSAGES, \
+		WAITING_FOR_INPUT, \
+		WAITING_FOR_WORKOUT_TITLE, \
+		WAITING_FOR_EXERCISE_NAME, \
+		WAITING_FOR_EXERCISE_VIDEO_LINK, \
+		WAITING_FOR_MUSCLES_WORKED, \
+		WAITING_FOR_REP_COUNT
+
 	# log all message ids
 	MESSAGES.append(message)
 
@@ -378,7 +416,10 @@ def show_start_options(is_new_user=False, call=None):
 
 
 def send_message(message_text, reply_markup=None, parse_mode=""):
-	global MESSAGES
+	global \
+		MESSAGES, \
+		BOT, \
+		CHAT_ID
 
 	sent_message = BOT.send_message(
 					CHAT_ID,
@@ -390,7 +431,10 @@ def send_message(message_text, reply_markup=None, parse_mode=""):
 
 
 def send_edited_message(message_text, previous_message_id, reply_markup=None, parse_mode=""):
-	global MESSAGES
+	global \
+		MESSAGES, \
+		BOT, \
+		CHAT_ID
 
 	message_to_edit = None
 	message_index = None
@@ -411,6 +455,8 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 
 
 def choose_workout(call=None, comes_from=None):
+	global USER
+
 	if USER.saved_workouts:
 		message_text = "Which workout routine would you like to start?"
 
@@ -427,8 +473,7 @@ def choose_workout(call=None, comes_from=None):
 		else:
 			send_message(
 				message_text,
-				reply_markup=reply_markup
-			)
+				reply_markup=reply_markup)
 	else:
 		if call:
 			message_text = "You don't have any stored workouts. Would you like to create a new one?"
@@ -454,7 +499,9 @@ def get_workout_title_from_input(call=None, message=None):
 	:param message:
 	:return:
 	"""
-	global WAITING_FOR_INPUT, WAITING_FOR_WORKOUT_TITLE
+	global \
+		WAITING_FOR_INPUT, \
+		WAITING_FOR_WORKOUT_TITLE
 
 	if not message:
 		message_text = '''New workout\n\nWhat would you like to name your workout?'''
@@ -500,13 +547,12 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 
 	global \
 		EXERCISE, \
-		WAITING_FOR_INPUT
-
-	# flags that direct the conversation. Only one of them should be True at a time!
-	global \
+		WAITING_FOR_INPUT, \
 		WAITING_FOR_EXERCISE_NAME, \
 		WAITING_FOR_EXERCISE_VIDEO_LINK, \
-		WAITING_FOR_MUSCLES_WORKED
+		WAITING_FOR_MUSCLES_WORKED, \
+		WORKOUT_INDEX, \
+		USER
 
 	WAITING_FOR_INPUT = True
 
@@ -532,8 +578,8 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 
 			# muscles worked here
 			send_message(
-				"How about a brief description of muscles worked, "
-				"like this: 'chest, triceps, front delts'?\n(Or click /next to continue)")
+				"How about a brief description of muscles worked?"
+				"\n\n(e.g 'chest, triceps, front delts')\n\nIf not, click /next to continue.")
 			WAITING_FOR_MUSCLES_WORKED = True
 
 		elif message_type == "EXERCISE_MUSCLES_WORKED":
@@ -554,6 +600,11 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 
 
 def exercise_added(call=None):
+	global \
+		WORKOUT_INDEX, \
+		EXERCISE, \
+		USER
+
 	workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
 	message_text = \
 		f"Exercise summary:\n\n" \
@@ -580,7 +631,9 @@ def do_workout(new_rep_entry=False, message=None):
 	global \
 		WORKOUT, \
 		WAITING_FOR_REP_COUNT, \
-		WAITING_FOR_INPUT
+		WAITING_FOR_INPUT, \
+		USER, \
+		CURRENT_EXERCISE_INDEX
 
 	if not WORKOUT.running:
 		# only happens once (when the workout gets started initially)
@@ -618,6 +671,8 @@ def do_workout(new_rep_entry=False, message=None):
 
 
 def workout_completed():
+	global WORKOUT
+
 	send_message("Great job 💪 You're done!")
 
 	# send workout report
@@ -635,6 +690,7 @@ def workout_completed():
 
 
 def delete_workout(call, workout_id):
+	global USER
 	workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
 	send_edited_message(
 		f"Are you sure you want to delete {workout_title}?",
@@ -642,6 +698,8 @@ def delete_workout(call, workout_id):
 
 
 def handle_view_workout(call=None):
+	global USER
+
 	if USER.saved_workouts:
 		if call:
 			send_edited_message(
@@ -657,6 +715,8 @@ def handle_view_workout(call=None):
 
 
 def show_workout_details(call, workout_id):
+	global USER
+
 	workout = [w for w in USER.saved_workouts if w.id == workout_id][0]
 	send_edited_message(
 		str(workout),
@@ -666,25 +726,19 @@ def show_workout_details(call, workout_id):
 
 
 def remove_inline_replies():
+	global MESSAGES
 	# since user interaction has proceeded, remove any previous inline reply markups.
 	for ix, message in enumerate(MESSAGES):
 		if type(message.reply_markup) is telebot.types.InlineKeyboardMarkup:
 			send_edited_message(message.text, message.id, reply_markup=None)
 
 
-def handle_explore_community():
-	pass
-
-
 def handle_community_request(call):
-	# would you like to explore the community?
-	# yes -> explore community
-	# no -> what can I help you with? show commands
 	message_text = "Would you like to explore workouts created by the bodyweight fitness community?"
 	send_edited_message(message_text, call.message.id, reply_markup=explore_community_workouts_answer_markup())
 
 
-def send_report():
+def handle_explore_community():
 	pass
 
 
