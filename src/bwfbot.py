@@ -1,6 +1,8 @@
 import telebot
-
-from telebot.types import ReplyKeyboardRemove
+import requests
+import yaml
+import json
+import jsonpickle
 
 from models.user import User
 from models.exercise import Exercise
@@ -10,16 +12,16 @@ from markups import *
 from time import sleep
 from copy import deepcopy
 from uuid import uuid4
-from yaml import load, FullLoader
 
 # configuration
 with open("../config.yml", "r") as fp:
-	CONFIG = load(fp, FullLoader)
+	CONFIG = yaml.load(fp, yaml.FullLoader)
 
 TOKEN = CONFIG["telegram"]["token"]
+DB_ROOT = CONFIG["firebase"]["reference"]
 
 BOT = telebot.TeleBot(TOKEN)
-USER = User()
+USER_ID = None
 CHAT_ID = None
 MESSAGES = []
 
@@ -92,7 +94,10 @@ def handle_callback_query(call):
 	global \
 		WORKOUT_INDEX, \
 		WORKOUT_ID, \
-		RESET_STATE
+		RESET_STATE, \
+		USER_ID
+
+	user = get_user_from_database(USER_ID)
 
 	if call.data == "choose_workouts":
 		choose_workout(call=call)
@@ -126,15 +131,22 @@ def handle_callback_query(call):
 
 	elif call.data.startswith("START_WORKOUT:"):
 		WORKOUT_ID = call.data.replace("START_WORKOUT:", "")
-		temp_workout = [w for w in USER.saved_workouts if w.id == WORKOUT_ID][0]
-		WORKOUT_INDEX = USER.saved_workouts.index(temp_workout)
+		temp_workout = {}
+		counter = 0
+		for node_id in user['saved_workouts']:
+			if user['saved_workouts'][node_id]['id'] == WORKOUT_ID:
+				temp_workout = user['saved_workouts'][node_id]
+				break
+			counter += 1
 
-		if temp_workout.exercises:
+		WORKOUT_INDEX = counter
+
+		if temp_workout.get('exercises'):
 			send_edited_message("Let's go! 💪", call.message.id)
 			do_workout()
 		else:
 			send_edited_message(
-				f"{temp_workout.title} has no exercises. Do you want to add some?",
+				f"{temp_workout['title']} has no exercises. Do you want to add some?",
 				call.message.id,
 				reply_markup=add_exercise_markup())
 
@@ -167,7 +179,7 @@ def handle_callback_query(call):
 			send_edited_message(
 				"Done! The running workout has been cancelled.",
 				call.message.id)
-			send_message("Please resend your command.", reply_markup=ReplyKeyboardRemove())
+			send_message("Please resend your command.", reply_markup=telebot.types.ReplyKeyboardRemove())
 		else:
 			send_edited_message("Okay, I'll not cancel the running workout.", call.message.id)
 
@@ -179,7 +191,7 @@ def initialize(message):
 	global WORKOUT
 	global RESET_STATE
 	global CHAT_ID
-	global USER
+	global USER_ID
 
 	MESSAGES.append(message)
 	remove_inline_replies()
@@ -192,13 +204,14 @@ def initialize(message):
 	reset_state()
 
 	CHAT_ID = message.chat.id
-	# TODO: USER = get_user_from_id(message.from_user.id)
+	USER_ID = message.from_user.id
+
 	is_new_user = False
-	if not USER.id:
-		# new account. create new user profile
+	user = get_user_from_database(USER_ID)
+	if not user:
 		is_new_user = True
-		USER = User(message.from_user.id, message.from_user.first_name, message.from_user.last_name)
-	show_start_options(is_new_user)
+		user = add_user_to_database(USER_ID, message.from_user.first_name, message.from_user.last_name)
+	show_start_options(is_new_user, username=user['first_name'])
 
 
 @BOT.message_handler(commands=["begin"])
@@ -401,7 +414,41 @@ def handle_user_input(message):
 
 # ----------------- FUNCTIONS ------------------
 
-def show_start_options(is_new_user=False, call=None):
+
+def get_user_from_database(user_id):
+	global DB_ROOT
+
+	user = None
+	res = requests.get(DB_ROOT + "users.json")
+	if res.ok and res.text != "null":
+		users = res.json()
+		for uid in users:  # uid is the identifier firebase applies to every new node
+			user_object = users[uid]
+			if user_object["id"] == user_id:
+				user = user_object
+				break
+
+	if user:
+		if "saved_workouts" not in user:
+			user["saved_workouts"] = {}
+		if "created_workouts" not in user:
+			user["created_workouts"] = {}
+
+	return user
+
+
+def add_user_to_database(user_id, user_first_name, user_last_name):
+	global DB_ROOT
+
+	new_user = User(user_id, user_first_name, user_last_name)
+	new_user_json = jsonpickle.encode(new_user, unpicklable=False)
+	print(new_user_json)
+	res = requests.post(DB_ROOT + "users.json", new_user_json)
+	print(res.status_code, res.text)
+	return get_user_from_database(user_id)
+
+
+def show_start_options(is_new_user=False, call=None, username="username"):
 	if call:
 		message_text = \
 			"What can I help you with?\n\n" \
@@ -409,7 +456,7 @@ def show_start_options(is_new_user=False, call=None):
 		send_edited_message(message_text, call.message.id, reply_markup=start_options_markup())
 	else:
 		message_text = f'''
-				{"Welcome" if is_new_user else "Welcome back"}, {USER.first_name}. What would you like to do today?
+				{"Welcome" if is_new_user else "Welcome back"}, {username}. What would you like to do today?
 				\nType '/' to see all commands you can give me.'''
 
 		send_message(message_text.strip(), reply_markup=start_options_markup())
@@ -455,15 +502,16 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 
 
 def choose_workout(call=None, comes_from=None):
-	global USER
 
-	if USER.saved_workouts:
+	user = get_user_from_database(USER_ID)
+
+	if user['saved_workouts']:
 		message_text = "Which workout routine would you like to start?"
 
 		if comes_from == "add_another_exercise":
-			reply_markup = list_workouts_markup(USER.saved_workouts, comes_from="add_another_exercise")
+			reply_markup = list_workouts_markup(user['saved_workouts'], comes_from="add_another_exercise")
 		else:
-			reply_markup = list_workouts_markup(USER.saved_workouts)
+			reply_markup = list_workouts_markup(user['saved_workouts'])
 
 		if call:
 			send_edited_message(
@@ -482,6 +530,7 @@ def choose_workout(call=None, comes_from=None):
 				call.message.id,
 				reply_markup=create_workout_answer_markup())
 		else:
+			# if the user wants to start a working by sending /begin command
 			message_text = "You don't have any stored workouts. Would you like to create a new one?"
 			send_message(
 				message_text,
@@ -526,13 +575,30 @@ def set_workout(message):
 	:param message:
 	:return:
 	"""
-	global USER
 
 	workout_title = message.text
 	new_workout = Workout(workout_title, message.from_user.id)
-	USER.saved_workouts.append(new_workout)
+
+	# append new workout to user's list of saved workouts
+	add_workout_to_database(USER_ID, new_workout)
+
 	message_text = f'''New workout\n\n{workout_title} has been created! Now let's add some exercises.'''
 	send_message(message_text, reply_markup=add_exercise_markup())
+
+
+def add_workout_to_database(user_id, workout):
+	firebase_node_id = ""
+	res = requests.get(DB_ROOT + "users.json")
+	if res.ok and res.text != "null":
+		users = res.json()
+		for identifier in users:
+			if users[identifier]["id"] == user_id:
+				firebase_node_id = identifier
+				break
+
+	if firebase_node_id:
+		workout_json = jsonpickle.encode(workout, unpicklable=False)
+		requests.post(DB_ROOT + "users/" + firebase_node_id + "/saved_workouts.json", workout_json)
 
 
 def add_exercise(call=None, message=None, message_type="", skip_setting=False):
@@ -686,7 +752,7 @@ def workout_completed():
 		report += f"*{exercise.name}*\nTotal: {total}\nNo\\. of sets: {sets}\nAverage per set: {average}\n\n"
 
 	# number pad custom keyboard is not needed anymore
-	send_message(report, reply_markup=ReplyKeyboardRemove(), parse_mode="MarkdownV2")
+	send_message(report, reply_markup=telebot.types.ReplyKeyboardRemove(), parse_mode="MarkdownV2")
 
 
 def delete_workout(call, workout_id):

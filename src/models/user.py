@@ -8,5 +8,5 @@ class User:
 		self.id = telegram_id
 		self.first_name = first_name
 		self.last_name = last_name
-		self.saved_workouts = []
-		self.completed_workouts = []
+		self.saved_workouts = {}
+		self.completed_workouts = {}

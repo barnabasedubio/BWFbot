@@ -45,9 +45,16 @@ def create_workout_answer_markup():
 
 
 def list_workouts_markup(workouts, comes_from=None):
+    """
+    workouts is a dict containing firebase node ids which in turn contain a workout object
+    :param workouts:
+    :param comes_from:
+    :return:
+    """
     markup = InlineKeyboardMarkup()
-    for workout in workouts:
-        markup.add(InlineKeyboardButton(workout.title, callback_data=f"START_WORKOUT:{workout.id}"))
+    for node_id in workouts:
+        workout = workouts[node_id]
+        markup.add(InlineKeyboardButton(workout['title'], callback_data=f"START_WORKOUT:{workout['id']}"))
     if comes_from == "add_another_exercise":
         markup.add(InlineKeyboardButton("Go back", callback_data="exercise_added"))
     else:
@@ -57,8 +64,9 @@ def list_workouts_markup(workouts, comes_from=None):
 
 def view_workout_details_markup(workouts):
     markup = InlineKeyboardMarkup()
-    for workout in workouts:
-        markup.add(InlineKeyboardButton(workout.title, callback_data=f"VIEW_WORKOUT:{workout.id}"))
+    for node_id in workouts:
+        workout = workouts[node_id]
+        markup.add(InlineKeyboardButton(workout['title'], callback_data=f"VIEW_WORKOUT:{workout['id']}"))
     return markup
 
 
@@ -70,8 +78,9 @@ def return_to_view_workout_details_markup():
 
 def delete_workout_markup(workouts):
     markup = InlineKeyboardMarkup()
-    for workout in workouts:
-        markup.add(InlineKeyboardButton(workout.title, callback_data=f"DELETE_WORKOUT:{workout.id}"))
+    for node_id in workouts:
+        workout = workouts[node_id]
+        markup.add(InlineKeyboardButton(workout['title'], callback_data=f"DELETE_WORKOUT:{workout['id']}"))
     return markup
 
 
