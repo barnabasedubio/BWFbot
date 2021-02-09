@@ -423,18 +423,21 @@ def handle_user_input(message):
 
 
 def get_user_from_database(user_id):
-	global DB_ROOT
-	node_id = None
+	node_id = USER_NODE_ID
 	user = None
-	res = requests.get(f"{DB_ROOT}/users.json")
-	if res.ok and res.text != "null":
-		users = res.json()
-		for uid in users:  # uid is the identifier firebase applies to every new node
-			user_object = users[uid]
-			if user_object["id"] == user_id:
-				user = user_object
-				node_id = uid
-				break
+	if node_id:
+		res = requests.get(f"{DB_ROOT}/users/{USER_NODE_ID}.json")
+		return res.json(), node_id
+	else:
+		res = requests.get(f"{DB_ROOT}/users.json")
+		if res.ok and res.text != "null":
+			users = res.json()
+			for uid in users:  # uid is the identifier firebase applies to every new node
+				user_object = users[uid]
+				if user_object["id"] == user_id:
+					user = user_object
+					node_id = uid
+					break
 
 	if user:
 		if "saved_workouts" not in user:
@@ -450,7 +453,6 @@ def add_user_to_database(user_id, user_first_name, user_last_name):
 
 	new_user = User(user_id, user_first_name, user_last_name)
 	new_user_json = jsonpickle.encode(new_user, unpicklable=False)
-	print(new_user_json)
 	res = requests.post(f"{DB_ROOT}/users.json", new_user_json)
 	print(res.status_code, res.text)
 	return get_user_from_database(user_id)
