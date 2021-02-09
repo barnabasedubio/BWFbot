@@ -10,7 +10,6 @@ from models.workout import Workout
 from markups import *
 
 from time import sleep
-from copy import deepcopy
 from uuid import uuid4
 
 # configuration
@@ -248,7 +247,7 @@ def create_workout(message):
 	MESSAGES.append(message)
 	remove_inline_replies()
 
-	if WORKOUT and WORKOUT['running']  and not RESET_STATE:
+	if WORKOUT and WORKOUT['running'] and not RESET_STATE:
 		confirm_reset_state()
 		return
 
