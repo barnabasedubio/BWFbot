@@ -1,6 +1,7 @@
 import telebot
 import requests
 import yaml
+import json
 import jsonpickle
 
 from models.user import User
@@ -29,7 +30,6 @@ global \
 	WAITING_FOR_INPUT, \
 	WORKOUT, \
 	WORKOUT_INDEX, \
-	WORKOUT_ID, \
 	WAITING_FOR_WORKOUT_TITLE, \
 	EXERCISE, \
 	WAITING_FOR_EXERCISE_NAME, \
@@ -54,7 +54,6 @@ def reset_state():
 		WAITING_FOR_INPUT, \
 		WORKOUT, \
 		WORKOUT_INDEX, \
-		WORKOUT_ID, \
 		WAITING_FOR_WORKOUT_TITLE, \
 		EXERCISE, \
 		WAITING_FOR_EXERCISE_NAME, \
@@ -69,7 +68,6 @@ def reset_state():
 
 	WORKOUT = Workout()
 	WORKOUT_INDEX = None
-	WORKOUT_ID = -1
 	WAITING_FOR_WORKOUT_TITLE = False
 
 	EXERCISE = Exercise()
@@ -93,7 +91,6 @@ def handle_callback_query(call):
 	"""
 	global \
 		WORKOUT_INDEX, \
-		WORKOUT_ID, \
 		RESET_STATE, \
 		USER_ID
 
@@ -130,11 +127,11 @@ def handle_callback_query(call):
 		handle_view_workout(call)
 
 	elif call.data.startswith("START_WORKOUT:"):
-		WORKOUT_ID = call.data.replace("START_WORKOUT:", "")
+		workout_id = call.data.replace("START_WORKOUT:", "")
 		temp_workout = {}
 		counter = 0
 		for node_id in user['saved_workouts']:
-			if user['saved_workouts'][node_id]['id'] == WORKOUT_ID:
+			if user['saved_workouts'][node_id]['id'] == workout_id:
 				temp_workout = user['saved_workouts'][node_id]
 				break
 			counter += 1
@@ -151,21 +148,29 @@ def handle_callback_query(call):
 				reply_markup=add_exercise_markup())
 
 	elif call.data.startswith("DELETE_WORKOUT:"):
-		WORKOUT_ID = call.data.replace("DELETE_WORKOUT:", "")
-		delete_workout(call=call, workout_id=WORKOUT_ID)
+		workout_id = call.data.replace("DELETE_WORKOUT:", "")
+		delete_workout(call=call, workout_id=workout_id)
 
 	elif call.data.startswith("CONFIRM_DELETE_WORKOUT:"):
-		WORKOUT_ID = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
-		workout_title = [w.title for w in USER.saved_workouts if w.id == WORKOUT_ID][0]
-		if len(USER.saved_workouts) == 1:
-			USER.saved_workouts = []
+		workout_id = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
+		workout = get_workout_from_database(workout_id)
+		workout_title = workout['title']
+		if len(user['saved_workouts']) == 1:
+			res = requests.delete(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json")
+			print(res.status_code, res.text)
 		else:
-			USER.saved_workouts = [w for w in USER.saved_workouts if w.id != WORKOUT_ID]
+			user['saved_workouts'] = {
+				key: value
+				for (key, value) in user['saved_workouts'].items()
+				if user['saved_workouts'][key]['id'] != workout_id}
+			res = requests.put(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json", json.dumps(user['saved_workouts']))
+			print(res.status_code, res.text)
+
 		send_edited_message(f"Done! {workout_title} is gone from your saved workouts.", call.message.id)
 
 	elif call.data.startswith("ABORT_DELETE_WORKOUT:"):
 		workout_id = call.data.replace("ABORT_DELETE_WORKOUT:", "")
-		workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
+		workout_title = get_workout_from_database(workout_id)['title']
 		send_edited_message(f"Gotcha! Will not delete {workout_title}.", call.message.id)
 
 	elif call.data.startswith("VIEW_WORKOUT:"):
@@ -343,8 +348,7 @@ def handle_delete_workout(message):
 	global \
 		MESSAGES, \
 		WORKOUT, \
-		RESET_STATE, \
-		USER
+		RESET_STATE
 
 	MESSAGES.append(message)
 	remove_inline_replies()
@@ -355,12 +359,14 @@ def handle_delete_workout(message):
 
 	reset_state()
 
-	if USER.saved_workouts:
+	user = get_user_from_database(USER_ID)[0]
+
+	if user['saved_workouts']:
 		message_text = \
 			"Which workout would you like to delete?\n\n" \
 			"(Note: this doesn't affect your already completed workouts, so no worries)"
 
-		send_message(message_text, reply_markup=delete_workout_markup(USER.saved_workouts))
+		send_message(message_text, reply_markup=delete_workout_markup(user['saved_workouts']))
 	else:
 		send_message("You don't have any stored workouts.")
 
@@ -448,6 +454,13 @@ def add_user_to_database(user_id, user_first_name, user_last_name):
 	res = requests.post(f"{DB_ROOT}/users.json", new_user_json)
 	print(res.status_code, res.text)
 	return get_user_from_database(user_id)
+
+
+def get_workout_from_database(workout_id):
+	user = get_user_from_database(USER_ID)[0]
+	for node_id in user['saved_workouts']:
+		if user['saved_workouts'][node_id]['id'] == workout_id:
+			return user['saved_workouts'][node_id]
 
 
 def show_start_options(is_new_user=False, call=None, username="username"):
@@ -709,11 +722,12 @@ def do_workout(new_rep_entry=False, message=None):
 		WORKOUT, \
 		WAITING_FOR_REP_COUNT, \
 		WAITING_FOR_INPUT, \
-		USER, \
 		CURRENT_EXERCISE_INDEX
 
 	if not WORKOUT.running:
 		# only happens once (when the workout gets started initially)
+		# TODO: remove WORKOUT_ID
+		WORKOUT_ID = None  # this is just here so that the code doesnt crash
 		WORKOUT = deepcopy([w for w in USER.saved_workouts if w.id == WORKOUT_ID][0])
 		# give the new workout a new id
 		WORKOUT.id = str(uuid4())
@@ -767,8 +781,7 @@ def workout_completed():
 
 
 def delete_workout(call, workout_id):
-	global USER
-	workout_title = [w.title for w in USER.saved_workouts if w.id == workout_id][0]
+	workout_title = get_workout_from_database(workout_id)['title']
 	send_edited_message(
 		f"Are you sure you want to delete {workout_title}?",
 		call.message.id, reply_markup=delete_workout_confirmation_markup(workout_id))
@@ -793,12 +806,7 @@ def handle_view_workout(call=None):
 
 
 def show_workout_details(call, workout_id):
-
-	user = get_user_from_database(USER_ID)[0]
-	workout = None
-	for node_id in user['saved_workouts']:
-		if user['saved_workouts'][node_id]['id'] == workout_id:
-			workout = user['saved_workouts'][node_id]
+	workout = get_workout_from_database(workout_id)
 
 	send_edited_message(
 		stringify_workout(workout),
@@ -809,7 +817,7 @@ def show_workout_details(call, workout_id):
 
 def stringify_workout(workout):
 	result_string = f"*{workout['title']}*\n"
-	result_string += f"_Duration: \\~ {workout['length']} minutes_\n\n"
+	result_string += f"_Duration: \\~ {workout['duration']} minutes_\n\n"
 	if workout.get('exercises'):
 		result_string += "_Exercises:_\n\n"
 		for node_id in workout['exercises']:

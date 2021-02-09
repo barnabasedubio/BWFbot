@@ -24,5 +24,5 @@ class Exercise:
 			muscles_worked_string = "\nTargets:\n"
 
 		for muscle in self.muscles_worked:
-			muscles_worked_string += "▫️ " + muscle + "\n"
+			muscles_worked_string += "• " + muscle + "\n"
 		return f"{name_string}{video_link_string}{muscles_worked_string}"
