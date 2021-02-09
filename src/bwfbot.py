@@ -66,7 +66,7 @@ def reset_state():
 
 	WAITING_FOR_INPUT = False
 
-	WORKOUT = Workout()
+	WORKOUT = None
 	WORKOUT_INDEX = None
 	WAITING_FOR_WORKOUT_TITLE = False
 
@@ -90,6 +90,7 @@ def handle_callback_query(call):
 	:param call
 	"""
 	global \
+		WORKOUT, \
 		WORKOUT_INDEX, \
 		RESET_STATE, \
 		USER_ID
@@ -140,7 +141,7 @@ def handle_callback_query(call):
 
 		if temp_workout.get('exercises'):
 			send_edited_message("Let's go! 💪", call.message.id)
-			do_workout()
+			do_workout(workout_id=workout_id)
 		else:
 			send_edited_message(
 				f"{temp_workout['title']} has no exercises. Do you want to add some?",
@@ -153,7 +154,7 @@ def handle_callback_query(call):
 
 	elif call.data.startswith("CONFIRM_DELETE_WORKOUT:"):
 		workout_id = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
-		workout = get_workout_from_database(workout_id)
+		workout = get_saved_workout_from_database(workout_id)
 		workout_title = workout['title']
 		if len(user['saved_workouts']) == 1:
 			res = requests.delete(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json")
@@ -170,7 +171,7 @@ def handle_callback_query(call):
 
 	elif call.data.startswith("ABORT_DELETE_WORKOUT:"):
 		workout_id = call.data.replace("ABORT_DELETE_WORKOUT:", "")
-		workout_title = get_workout_from_database(workout_id)['title']
+		workout_title = get_saved_workout_from_database(workout_id)['title']
 		send_edited_message(f"Gotcha! Will not delete {workout_title}.", call.message.id)
 
 	elif call.data.startswith("VIEW_WORKOUT:"):
@@ -202,7 +203,7 @@ def initialize(message):
 	MESSAGES.append(message)
 	remove_inline_replies()
 
-	if WORKOUT.running and not RESET_STATE:
+	if WORKOUT and WORKOUT['running'] and not RESET_STATE:
 		confirm_reset_state()
 		return
 
@@ -229,7 +230,7 @@ def begin_workout(message):
 	MESSAGES.append(message)
 	remove_inline_replies()
 
-	if WORKOUT.running and not RESET_STATE:
+	if WORKOUT and WORKOUT['running'] and not RESET_STATE:
 		confirm_reset_state()
 		return
 
@@ -247,7 +248,7 @@ def create_workout(message):
 	MESSAGES.append(message)
 	remove_inline_replies()
 
-	if WORKOUT.running and not RESET_STATE:
+	if WORKOUT and WORKOUT['running']  and not RESET_STATE:
 		confirm_reset_state()
 		return
 
@@ -284,7 +285,7 @@ def proceed_to_next(message):
 		# user skipped the muscles worked entry
 		add_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED", skip_setting=True)
 
-	elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX != len(WORKOUT.exercises) - 1:
+	elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX != len(WORKOUT['exercises']) - 1:
 		# display the next exercise in the workout to the user
 		# if the user is on their last exercise, this logic is handled by the /done handler instead
 		CURRENT_EXERCISE_INDEX += 1
@@ -299,15 +300,15 @@ def finish(message):
 		WAITING_FOR_REP_COUNT, \
 		CURRENT_EXERCISE_INDEX, \
 		WORKOUT, \
-		USER, \
 		WAITING_FOR_INPUT
 
 	MESSAGES.append(message)
 
-	if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.exercises) - 1:
+	if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT['exercises']) - 1:
 		# user is done with their workout. End workout and add it to their completed workouts
-		WORKOUT.running = False
-		USER.completed_workouts.append(WORKOUT)
+		WORKOUT['running'] = False
+		res = requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/completed_workouts.json", json.dumps(WORKOUT))
+		print(res.status_code, res.text)
 
 		# reset exercise index
 		CURRENT_EXERCISE_INDEX = 0  # reset
@@ -329,7 +330,7 @@ def clear_dialog(message):
 
 	MESSAGES.append(message)
 
-	if WORKOUT.running and not RESET_STATE:
+	if WORKOUT and WORKOUT['running'] and not RESET_STATE:
 		confirm_reset_state()
 		return
 
@@ -353,7 +354,7 @@ def handle_delete_workout(message):
 	MESSAGES.append(message)
 	remove_inline_replies()
 
-	if WORKOUT.running and not RESET_STATE:
+	if WORKOUT and WORKOUT['running'] and not RESET_STATE:
 		confirm_reset_state()
 		return
 
@@ -458,7 +459,7 @@ def add_user_to_database(user_id, user_first_name, user_last_name):
 	return get_user_from_database(user_id)
 
 
-def get_workout_from_database(workout_id):
+def get_saved_workout_from_database(workout_id):
 	user = get_user_from_database(USER_ID)[0]
 	for node_id in user['saved_workouts']:
 		if user['saved_workouts'][node_id]['id'] == workout_id:
@@ -713,11 +714,12 @@ def exercise_added(call=None):
 	send_message(confirmation, reply_markup=add_another_exercise_markup())
 
 
-def do_workout(new_rep_entry=False, message=None):
+def do_workout(new_rep_entry=False, message=None, workout_id=None):
 	"""
 	start workout
 	:param new_rep_entry:
 	:param message:
+	:param workout_id
 	:return:
 	"""
 	global \
@@ -726,31 +728,30 @@ def do_workout(new_rep_entry=False, message=None):
 		WAITING_FOR_INPUT, \
 		CURRENT_EXERCISE_INDEX
 
-	if not WORKOUT.running:
+	if not WORKOUT:
 		# only happens once (when the workout gets started initially)
-		# TODO: remove WORKOUT_ID
-		WORKOUT_ID = None  # this is just here so that the code doesnt crash
-		WORKOUT = deepcopy([w for w in USER.saved_workouts if w.id == WORKOUT_ID][0])
+		WORKOUT = get_saved_workout_from_database(workout_id)
 		# give the new workout a new id
-		WORKOUT.id = str(uuid4())
-		WORKOUT.running = True
+		WORKOUT['id'] = str(uuid4())
+		WORKOUT['running'] = True
 
 	# create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
-	exercises_in_workout = WORKOUT.exercises
-	current_exercise = exercises_in_workout[CURRENT_EXERCISE_INDEX]
+	exercise_node_ids = list(WORKOUT['exercises'])
+	current_exercise_node_id = exercise_node_ids[CURRENT_EXERCISE_INDEX]
+	current_exercise = WORKOUT['exercises'][current_exercise_node_id]
 
 	if not new_rep_entry:
-		if current_exercise == WORKOUT.exercises[-1]:
+		if current_exercise['id'] == WORKOUT['exercises'][exercise_node_ids[-1]]['id']:
 			# user is performing the last exercise
 			message_text = \
 				f"Almost done\\!\n" \
-				f"{str(current_exercise)}\n" \
+				f"{stringify_exercise(current_exercise)}\n" \
 				f"Send me the rep count for each set\\. Once you're done, click /done\\."
 
 		else:
 			# the user is beginning the exercise. Show the exercise info
 			message_text = \
-				f"{str(current_exercise)}\n" \
+				f"{stringify_exercise(current_exercise)}\n" \
 				f"Send me the rep count for each set\\. Once you're done, click /next\\."
 
 		send_message(message_text, reply_markup=number_pad_markup(), parse_mode="MarkdownV2")
@@ -760,7 +761,10 @@ def do_workout(new_rep_entry=False, message=None):
 
 	else:
 		rep_count = int(message.text)
-		WORKOUT.exercises[CURRENT_EXERCISE_INDEX].reps.append(rep_count)
+		if not current_exercise.get('reps'):
+			current_exercise['reps'] = []
+
+		current_exercise['reps'].append(rep_count)
 
 
 def workout_completed():
@@ -771,19 +775,19 @@ def workout_completed():
 	# send workout report
 	# the report consists of: total rep amount | average reps per set for ever exercise.
 	report = "📊 *Workout Report*\n\n"
-	for exercise in WORKOUT.exercises:
-		total = sum(exercise.reps)
-		sets = str(len(exercise.reps))
-		average = "0" if total == 0 else str(round(total / len(exercise.reps), 2)).replace(".", "\\.")
-		print(total, sets, average)
-		report += f"*{exercise.name}*\nTotal: {total}\nNo\\. of sets: {sets}\nAverage per set: {average}\n\n"
+	for exercise_node_id in WORKOUT['exercises']:
+		exercise = WORKOUT['exercises'][exercise_node_id]
+		total = sum(exercise['reps'])
+		sets = str(len(exercise['reps']))
+		average = "0" if total == 0 else str(round(total / len(exercise['reps']), 2)).replace(".", "\\.")
+		report += f"*{exercise['name']}*\nTotal: {total}\nNo\\. of sets: {sets}\nAverage per set: {average}\n\n"
 
 	# number pad custom keyboard is not needed anymore
 	send_message(report, reply_markup=telebot.types.ReplyKeyboardRemove(), parse_mode="MarkdownV2")
 
 
 def delete_workout(call, workout_id):
-	workout_title = get_workout_from_database(workout_id)['title']
+	workout_title = get_saved_workout_from_database(workout_id)['title']
 	send_edited_message(
 		f"Are you sure you want to delete {workout_title}?",
 		call.message.id, reply_markup=delete_workout_confirmation_markup(workout_id))
@@ -808,7 +812,7 @@ def handle_view_workout(call=None):
 
 
 def show_workout_details(call, workout_id):
-	workout = get_workout_from_database(workout_id)
+	workout = get_saved_workout_from_database(workout_id)
 
 	send_edited_message(
 		stringify_workout(workout),
