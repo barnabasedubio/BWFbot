@@ -148,8 +148,6 @@ def handle_callback_query(call):
                                  for (node, workout) in user['completed_workouts'].items()
                                  if user['completed_workouts'][node]['template_id'] == workout_id}
 
-            # pprint(PAST_WORKOUT_DATA)
-
         if temp_workout.get('exercises'):
             send_edited_message("Let's go! 💪", call.message.id)
             do_workout(workout_id=workout_id)
@@ -818,23 +816,30 @@ def show_exercise_stats(call):
 
     # iterate over exercise performance history. For each set, display 3-workout MA and 6-workout MA (if exist)
     for set_nr in range(most_sets):
-        message_text += f"_{get_digit_as_word(set_nr)} set_\n"
         # 3 workout moving average:
         past_three_workouts = exercise_performance_history[-3:]
         current_set_sum = 0
         for sets in past_three_workouts:
             current_set_sum += sets[set_nr]
-        three_workout_moving_average = \
-            f"*{str(round(current_set_sum / len(past_three_workouts), 1))}*".replace(".", "\\.")
+        three_workout_moving_average = round(current_set_sum / len(past_three_workouts), 1)
 
         past_six_workouts = exercise_performance_history[-6:]
         current_set_sum = 0
         for sets in past_six_workouts:
             current_set_sum += sets[set_nr]
-        six_workout_moving_average = \
-            f"*{str(round(current_set_sum / len(past_six_workouts), 1))}*".replace(".", "\\.")
+        six_workout_moving_average = round(current_set_sum / len(past_six_workouts), 1)
 
-        message_text += f"🔸 {three_workout_moving_average}      🔹 {six_workout_moving_average}\n\n"
+        if int(three_workout_moving_average) == 0 and int(six_workout_moving_average) == 0:
+            # user has probably sto
+            message_text += ""
+        else:
+            message_text += f"_{get_digit_as_word(set_nr)} set_\n"
+            three_workout_moving_average_string = \
+                f"*{three_workout_moving_average}*".replace(".", "\\.")
+
+            six_workout_moving_average_string = \
+                f"*{six_workout_moving_average}*".replace(".", "\\.")
+            message_text += f"🔸 {three_workout_moving_average_string}      🔹 {six_workout_moving_average_string}\n\n"
 
     message_text += "🔸 _average of last 3 sessions_\n🔹 _average of last 6 sessions_"
 
