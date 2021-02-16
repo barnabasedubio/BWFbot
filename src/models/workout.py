@@ -10,6 +10,10 @@ as well as a list of exercises.
 class Workout:
 	def __init__(self, title="", created_by=""):
 		self.id = str(uuid4())
+		# for completed workouts, the template_id property specifies the original saved workout
+		# that the completed workout was based on.
+		# Since saved workouts are the template, they do not a template_id
+		self.template_id = ""
 		self.title = title
 		self.created_by = created_by
 		self.duration = 0
