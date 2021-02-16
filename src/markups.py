@@ -24,6 +24,7 @@ def reset_state_answer_markup():
 def add_exercise_markup():
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("Add exercise", callback_data="add_exercise"))
+    markup.add(InlineKeyboardButton("Go back", callback_data="choose_workouts"))
     return markup
 
 
