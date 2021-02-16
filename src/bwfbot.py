@@ -1,4 +1,3 @@
-import telebot
 import requests
 import yaml
 import json
@@ -11,7 +10,6 @@ from markups import *
 
 from time import sleep
 from uuid import uuid4
-from pprint import pprint
 
 # configuration
 with open("../config.yml", "r") as fp:
@@ -38,7 +36,7 @@ global \
     WAITING_FOR_SETUP_DONE, \
     WAITING_FOR_REP_COUNT, \
     CURRENT_EXERCISE_INDEX, \
-    PREVIOUS_WORKOUT_DATA, \
+    PAST_WORKOUT_DATA, \
     RESET_STATE
 
 
@@ -63,7 +61,7 @@ def reset_state():
         WAITING_FOR_SETUP_DONE, \
         WAITING_FOR_REP_COUNT, \
         CURRENT_EXERCISE_INDEX, \
-        PREVIOUS_WORKOUT_DATA, \
+        PAST_WORKOUT_DATA, \
         RESET_STATE
 
     WAITING_FOR_INPUT = False
@@ -81,7 +79,7 @@ def reset_state():
     WAITING_FOR_REP_COUNT = False
     CURRENT_EXERCISE_INDEX = 0
 
-    PREVIOUS_WORKOUT_DATA = {}
+    PAST_WORKOUT_DATA = {}
 
     RESET_STATE = False
 
@@ -98,7 +96,7 @@ def handle_callback_query(call):
         WORKOUT_INDEX, \
         RESET_STATE, \
         USER_ID, \
-        PREVIOUS_WORKOUT_DATA
+        PAST_WORKOUT_DATA
 
     user = get_user_from_database(USER_ID)[0]
 
@@ -146,11 +144,11 @@ def handle_callback_query(call):
 
         if user.get('completed_workouts'):
             # get previous workout data from user's completed workouts that use the saved workout as a template
-            PREVIOUS_WORKOUT_DATA = {node: workout
-                                     for (node, workout) in user['completed_workouts'].items()
-                                     if user['completed_workouts'][node]['template_id'] == workout_id}
+            PAST_WORKOUT_DATA = {node: workout
+                                 for (node, workout) in user['completed_workouts'].items()
+                                 if user['completed_workouts'][node]['template_id'] == workout_id}
 
-            pprint(PREVIOUS_WORKOUT_DATA)
+            # pprint(PAST_WORKOUT_DATA)
 
         if temp_workout.get('exercises'):
             send_edited_message("Let's go! 💪", call.message.id)
@@ -161,6 +159,9 @@ def handle_callback_query(call):
                 call.message.id,
                 reply_markup=add_exercise_markup())
 
+    elif call.data == "show_exercise_stats":
+        show_exercise_stats(call)
+
     elif call.data.startswith("DELETE_WORKOUT:"):
         workout_id = call.data.replace("DELETE_WORKOUT:", "")
         delete_workout(call=call, workout_id=workout_id)
@@ -170,16 +171,15 @@ def handle_callback_query(call):
         workout = get_saved_workout_from_database(workout_id)
         workout_title = workout['title']
         if len(user['saved_workouts']) == 1:
-            res = requests.delete(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json")
-            print(res.status_code, res.text)
+            requests.delete(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json")
         else:
             user['saved_workouts'] = {
                 key: value
                 for (key, value) in user['saved_workouts'].items()
                 if user['saved_workouts'][key]['id'] != workout_id}
-            res = requests.put(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json",
-                               json.dumps(user['saved_workouts']))
-            print(res.status_code, res.text)
+            requests.put(
+                f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json",
+                json.dumps(user['saved_workouts']))
 
         send_edited_message(f"Done! {workout_title} is gone from your saved workouts.", call.message.id)
 
@@ -740,7 +740,8 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
         WORKOUT, \
         WAITING_FOR_REP_COUNT, \
         WAITING_FOR_INPUT, \
-        CURRENT_EXERCISE_INDEX
+        CURRENT_EXERCISE_INDEX, \
+        PAST_WORKOUT_DATA
 
     if not WORKOUT:
         # only happens once (when the workout gets started initially)
@@ -756,7 +757,9 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     current_exercise = WORKOUT['exercises'][current_exercise_node_id]
 
     if not new_rep_entry:
+        show_done = False
         if current_exercise['id'] == WORKOUT['exercises'][exercise_node_ids[-1]]['id']:
+            show_done = True
             # user is performing the last exercise
             message_text = \
                 f"Almost done\\!\n" \
@@ -769,7 +772,14 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
                 f"{stringify_exercise(current_exercise)}\n" \
                 f"Send me the rep count for each set\\. Once you're done, click /next\\."
 
-        send_message(message_text, reply_markup=number_pad_markup(), parse_mode="MarkdownV2")
+        send_message(message_text, reply_markup=number_pad_markup(show_done), parse_mode="MarkdownV2")
+
+        # view exercise details (such as the rolling average and other stats)
+        if PAST_WORKOUT_DATA:
+            send_message(
+                "Do you want to view your past performance with this exercise?",
+                reply_markup=view_exercise_details_markup()
+            )
 
         WAITING_FOR_REP_COUNT = True
         WAITING_FOR_INPUT = True
@@ -782,6 +792,53 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
         current_exercise['reps'].append(rep_count)
 
 
+def show_exercise_stats(call):
+    global \
+        CURRENT_EXERCISE_INDEX, \
+        PAST_WORKOUT_DATA
+
+    exercise_performance_history = []  # e.g: user's past performance on dips: [[8, 8, 7, 6] , [7, 7, 6, 7] , [9, 8, 9]]
+    message_text = ""
+
+    for workout_node_id in PAST_WORKOUT_DATA:
+        current_exercise_node_id = list(PAST_WORKOUT_DATA[workout_node_id]['exercises'])[CURRENT_EXERCISE_INDEX]
+        current_exercise = PAST_WORKOUT_DATA[workout_node_id]['exercises'][current_exercise_node_id]
+        exercise_performance_history.append(current_exercise.get('reps') or [])
+
+    # [[1,2,3] , [1,2,3,4] , [1,2,3,4,5]] --> most sets: 5 ([1,2,3,4,5])
+    most_sets = 0
+    for sets in exercise_performance_history:
+        if len(sets) > most_sets:
+            most_sets = len(sets)
+
+    # [[1,2,3] , [1,2,3,4] , [1,2,3,4,5]] --> [[1,2,3,0,0], [1,2,3,4,0], [1,2,3,4,5]]
+    for sets in exercise_performance_history:
+        while len(sets) < most_sets:
+            sets.append(0)
+
+    # iterate over exercise performance history. For each set, display 3-workout MA and 6-workout MA (if exist)
+    for set_nr in range(most_sets):
+        message_text += f"Set {set_nr + 1}:\n"
+        # 3 workout moving average:
+        past_three_workouts = exercise_performance_history[-3:]
+        current_set_sum = 0
+        for sets in past_three_workouts:
+            current_set_sum += sets[set_nr]
+        three_workout_moving_average = round(current_set_sum / len(past_three_workouts), 1)
+
+        past_six_workouts = exercise_performance_history[-6:]
+        current_set_sum = 0
+        for sets in past_six_workouts:
+            current_set_sum += sets[set_nr]
+        six_workout_moving_average = round(current_set_sum / len(past_six_workouts), 1)
+
+        message_text += f"🔸 {three_workout_moving_average}      🔹 {six_workout_moving_average}\n\n"
+
+    message_text += "🔸 average of last 3 sessions\n🔹 average of last 6 sessions"
+
+    send_edited_message(message_text, call.message.id)
+
+
 def workout_completed():
     global WORKOUT
 
@@ -792,10 +849,15 @@ def workout_completed():
     report = "📊 *Workout Report*\n\n"
     for exercise_node_id in WORKOUT['exercises']:
         exercise = WORKOUT['exercises'][exercise_node_id]
-        total = sum(exercise['reps'])
-        sets = str(len(exercise['reps']))
-        average = "0" if total == 0 else str(round(total / len(exercise['reps']), 2)).replace(".", "\\.")
-        report += f"*{exercise['name']}*\nTotal: {total}\nNo\\. of sets: {sets}\nAverage per set: {average}\n\n"
+        if exercise.get('reps'):
+            total = sum(exercise.get('reps'))
+            sets = len(exercise.get('reps'))
+        else:
+            total = 0
+            sets = 0
+        average = "0" if total == 0 else str(round(total / len(exercise['reps']), 1)).replace(".", "\\.")
+        report += \
+            f"*{exercise['name']}*\n_Total_: *{total}*\n_No\\. of sets_: *{sets}*\n_Average per set_: *{average}*\n\n"
 
     # number pad custom keyboard is not needed anymore
     send_message(report, reply_markup=telebot.types.ReplyKeyboardRemove(), parse_mode="MarkdownV2")

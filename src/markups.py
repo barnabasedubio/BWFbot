@@ -1,4 +1,6 @@
+import telebot
 from telebot.types import \
+    KeyboardButton, \
     InlineKeyboardMarkup, \
     InlineKeyboardButton, \
     ReplyKeyboardMarkup
@@ -103,12 +105,24 @@ def explore_community_workouts_answer_markup():
     return markup
 
 
-def number_pad_markup():
+def view_exercise_details_markup():
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton("View Details", callback_data="show_exercise_stats")
+    )
+    return markup
+
+
+def number_pad_markup(show_done=False):
     # User uses this keyboard to store their reps after each set
     number_pad = ReplyKeyboardMarkup(
         resize_keyboard=False,
         one_time_keyboard=False
     )
     # * operator: spread the entries
-    number_pad.add(*[str(x) for x in range(1, 16)])
+    number_pad.add(*[str(x) for x in range(4, 16)])
+    number_pad.add(
+        KeyboardButton("/previous"),
+        KeyboardButton("/done" if show_done else "/next")
+    )
     return number_pad
