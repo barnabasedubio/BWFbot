@@ -818,25 +818,27 @@ def show_exercise_stats(call):
 
     # iterate over exercise performance history. For each set, display 3-workout MA and 6-workout MA (if exist)
     for set_nr in range(most_sets):
-        message_text += f"Set {set_nr + 1}:\n"
+        message_text += f"_{get_digit_as_word(set_nr)} set_\n"
         # 3 workout moving average:
         past_three_workouts = exercise_performance_history[-3:]
         current_set_sum = 0
         for sets in past_three_workouts:
             current_set_sum += sets[set_nr]
-        three_workout_moving_average = round(current_set_sum / len(past_three_workouts), 1)
+        three_workout_moving_average = \
+            f"*{str(round(current_set_sum / len(past_three_workouts), 1))}*".replace(".", "\\.")
 
         past_six_workouts = exercise_performance_history[-6:]
         current_set_sum = 0
         for sets in past_six_workouts:
             current_set_sum += sets[set_nr]
-        six_workout_moving_average = round(current_set_sum / len(past_six_workouts), 1)
+        six_workout_moving_average = \
+            f"*{str(round(current_set_sum / len(past_six_workouts), 1))}*".replace(".", "\\.")
 
         message_text += f"🔸 {three_workout_moving_average}      🔹 {six_workout_moving_average}\n\n"
 
-    message_text += "🔸 average of last 3 sessions\n🔹 average of last 6 sessions"
+    message_text += "🔸 _average of last 3 sessions_\n🔹 _average of last 6 sessions_"
 
-    send_edited_message(message_text, call.message.id)
+    send_edited_message(message_text, call.message.id, parse_mode="MarkdownV2")
 
 
 def workout_completed():
@@ -935,6 +937,14 @@ def handle_community_request(call):
 
 def handle_explore_community():
     pass
+
+
+def get_digit_as_word(index):
+    digits = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eight", "ninth"]
+    if index < 9:
+        return f"{digits[index]}"
+    else:
+        return f"{index}th"
 
 
 if __name__ == "__main__":
