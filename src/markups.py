@@ -71,6 +71,7 @@ def view_workout_details_markup(workouts):
     for node_id in workouts:
         workout = workouts[node_id]
         markup.add(InlineKeyboardButton(workout['title'], callback_data=f"VIEW_WORKOUT:{workout['id']}"))
+    markup.add(InlineKeyboardButton("↩️ Go back", callback_data="start_menu"))
     return markup
 
 
@@ -85,6 +86,7 @@ def delete_workout_markup(workouts):
     for node_id in workouts:
         workout = workouts[node_id]
         markup.add(InlineKeyboardButton(workout['title'], callback_data=f"DELETE_WORKOUT:{workout['id']}"))
+    markup.add(InlineKeyboardButton("↩️ Go back", callback_data="start_menu"))
     return markup
 
 
