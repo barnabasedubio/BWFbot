@@ -8,35 +8,38 @@ from telebot.types import \
 
 def start_options_markup():
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Start one of my workouts", callback_data="choose_workouts"))
-    markup.add(InlineKeyboardButton("Create a new workout", callback_data="create_workout"))
-    markup.add(InlineKeyboardButton("Explore the community", callback_data="explore_community"))
+    markup.add(InlineKeyboardButton("💪 Start one of my workouts", callback_data="choose_workouts"))
+    markup.add(InlineKeyboardButton("✳️ Create a new workout", callback_data="create_workout"))
+    markup.add(InlineKeyboardButton("👥 Explore the community", callback_data="explore_community"))
     return markup
 
 
 def reset_state_answer_markup():
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("Yes", callback_data="RESET_STATE:YES"),
-        InlineKeyboardButton("No", callback_data="RESET_STATE:NO"),
+        InlineKeyboardButton("✅ Yes", callback_data="RESET_STATE:YES"),
+        InlineKeyboardButton("❌ No", callback_data="RESET_STATE:NO"),
     )
     return markup
 
 
 def add_exercise_markup(comes_from=None):
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Add new exercise", callback_data="add_exercise"))
-    markup.add(InlineKeyboardButton("Choose from catalogue", callback_data="choose_exercise_from_catalogue"))
+    markup.add(InlineKeyboardButton("➕ Add custom exercise", callback_data="add_exercise"))
+    markup.add(InlineKeyboardButton("🔎 Browse catalogue", callback_data="choose_exercise_from_catalogue"))
     if comes_from == "start_menu":
+        # user selected to start a workout that doesn't have any exercises
         markup.add(InlineKeyboardButton("↩️ Go back", callback_data="choose_workouts"))
+    else:
+        markup.add(InlineKeyboardButton("❌ Cancel", callback_data="cancel_add_exercise"))
     return markup
 
 
 def add_another_exercise_markup():
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Add new exercise", callback_data="add_exercise"))
-    markup.add(InlineKeyboardButton("Choose from catalogue", callback_data="choose_exercise_from_catalogue"))
-    markup.add(InlineKeyboardButton("Start workout", callback_data="exercise_menu:choose_workouts"))
+    markup.add(InlineKeyboardButton("➕ Add custom exercise", callback_data="add_exercise"))
+    markup.add(InlineKeyboardButton("🔎 Browse catalogue", callback_data="choose_exercise_from_catalogue"))
+    markup.add(InlineKeyboardButton("💪 Start workout", callback_data="exercise_menu:choose_workouts"))
     markup.add(InlineKeyboardButton("Go to main menu", callback_data="start_menu"))
     return markup
 
@@ -44,8 +47,8 @@ def add_another_exercise_markup():
 def create_workout_answer_markup():
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("Yes", callback_data="create_workout"),
-        InlineKeyboardButton("No", callback_data="request_community"),
+        InlineKeyboardButton("✅ Yes", callback_data="create_workout"),
+        InlineKeyboardButton("❌ No", callback_data="request_community"),
     )
     return markup
 
@@ -95,8 +98,8 @@ def delete_workout_markup(workouts):
 def delete_workout_confirmation_markup(workout_id):
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("Yes", callback_data=f"CONFIRM_DELETE_WORKOUT:{workout_id}"),
-        InlineKeyboardButton("No", callback_data=f"ABORT_DELETE_WORKOUT:{workout_id}")
+        InlineKeyboardButton("✅ Yes", callback_data=f"CONFIRM_DELETE_WORKOUT:{workout_id}"),
+        InlineKeyboardButton("❌ No", callback_data=f"ABORT_DELETE_WORKOUT:{workout_id}")
     )
     return markup
 
@@ -104,8 +107,8 @@ def delete_workout_confirmation_markup(workout_id):
 def explore_community_workouts_answer_markup():
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("Yes", callback_data="explore_community"),
-        InlineKeyboardButton("No", callback_data="start_menu"),
+        InlineKeyboardButton("✅ Yes", callback_data="explore_community"),
+        InlineKeyboardButton("❌ No", callback_data="start_menu"),
     )
     return markup
 
@@ -113,7 +116,7 @@ def explore_community_workouts_answer_markup():
 def view_exercise_details_markup():
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("View Details", callback_data="show_exercise_stats")
+        InlineKeyboardButton("🔎 View Details", callback_data="show_exercise_stats")
     )
     return markup
 
