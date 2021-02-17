@@ -1,0 +1,228 @@
+{
+  "Vertical Push":  {
+    "HSPU": {
+      "Pike Push Ups": {
+        "name": "Pike Push Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Front Delts",
+          "Triceps"
+        ]
+      },
+      "Elevated Pike Push Ups": {
+        "name": "Elevated Pike Push Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Front Delts",
+          "Triceps"
+        ]
+      },
+      "Wall Handstand Negatives": {
+        "name": "Wall Handstand Negatives",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Front Delts",
+          "Triceps"
+        ]
+      },
+      "Full Handstand Push Ups": {
+        "name": "Full Handstand Push Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Front Delts",
+          "Triceps"
+        ]
+      }
+    },
+    "Dip": {
+      "Bar Dips": {
+        "name": "Bar Dips",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Triceps",
+          "Lower Chest"
+        ]
+      },
+      "Ring Dips": {
+        "name": "Ring Dips",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Front Delts",
+          "Triceps"
+        ]
+      },
+      "Bulgarian Ring Dips": {
+        "name": "Bulgarian Ring Dips",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Lateral Delts",
+          "Chest",
+          "Triceps"
+        ]
+      }
+    }
+  },
+  "Vertical Pull":  {
+    "Pull Up": {
+      "Pull Up Negatives": {
+        "name": "Pull Up Negatives",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Lats",
+          "Traps"
+        ]
+      },
+      "Pull Ups": {
+        "name": "Pull Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Lats",
+          "Traps"
+        ]
+      },
+      "Offset Pull Ups": {
+        "name": "Offset Pull Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Lats",
+          "Traps"
+        ]
+      }
+    },
+    "Chin Up": {
+      "Chin Up Negatives": {
+        "name": "Chin Up Negatives",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Biceps",
+          "Posterior Delts",
+          "Lats",
+          "Brachialis"
+        ]
+      },
+      "Chin Ups": {
+        "name": "Chin Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Biceps",
+          "Posterior Delts",
+          "Lats",
+          "Brachialis"
+        ]
+      },
+      "Offset Chin Ups": {
+        "name": "Offset Chin Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Biceps",
+          "Posterior Delts",
+          "Lats",
+          "Brachialis"
+        ]
+      }
+    }
+  },
+  "Horizontal Push":  {
+    "Push Up": {
+      "Box Push Ups": {
+        "name": "Box Push Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Chest",
+          "Delts",
+          "Triceps",
+          "Abs"
+        ]
+      },
+      "Knee Push Ups": {
+        "name": "Knee Push Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Chest",
+          "Delts",
+          "Triceps",
+          "Abs"
+        ]
+      },
+      "Push Ups": {
+        "name": "Push Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Chest",
+          "Delts",
+          "Triceps",
+          "Abs"
+        ]
+      },
+      "Elevated Push Ups": {
+        "name": "Elevated Push Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Chest",
+          "Delts",
+          "Triceps",
+          "Abs"
+        ]
+      },
+      "Diamond Push Ups": {
+        "name": "Diamond Push Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Chest",
+          "Delts",
+          "Triceps",
+          "Abs"
+        ]
+      },
+      "Archer Push Ups": {
+        "name": "Archer Push Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Chest",
+          "Delts",
+          "Triceps",
+          "Abs"
+        ]
+      },
+      "One Armed Push Ups": {
+        "name": "One Armed Push Ups",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Chest",
+          "Delts",
+          "Triceps",
+          "Abs"
+        ]
+      }
+    }
+  },
+  "Horizontal Pull":  {
+    "Row": {
+      "Inverted Rows": {
+        "name": "Inverted Rows",
+        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "muscles_worked": [
+          "Back",
+          "Biceps",
+          "Forearms",
+          "Posterior Delts"
+        ]
+      },
+      "Elevated Rows": {
+        "name": "Elevated Rows",
+        "video_link": ""
+      }
+    }
+  },
+  "Core":  {
+    "L-Sit": {},
+    "Dragon Flag": {},
+    "Leg Raise": {},
+    "Windshield Wiper": {}
+  },
+  "Legs": {
+    "Squat": {},
+    "Curl": {},
+    "Calf Raise": {}
+  }
+}

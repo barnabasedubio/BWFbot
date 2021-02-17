@@ -15,8 +15,8 @@ from uuid import uuid4
 with open("../config.yml", "r") as fp:
     CONFIG = yaml.load(fp, yaml.FullLoader)
 
-TOKEN = CONFIG["telegram"]["token"]
-DB_ROOT = CONFIG["firebase"]["reference"]
+TOKEN = CONFIG.get("telegram").get("token")
+DB_ROOT = CONFIG.get("firebase").get("reference")
 
 BOT = telebot.TeleBot(TOKEN)
 USER_ID = None
@@ -38,6 +38,7 @@ global \
     WAITING_FOR_USER_FEEDBACK, \
     CURRENT_EXERCISE_INDEX, \
     PAST_WORKOUT_DATA, \
+    EXERCISE_PATH, \
     RESET_STATE
 
 
@@ -64,6 +65,7 @@ def reset_state():
         WAITING_FOR_USER_FEEDBACK, \
         CURRENT_EXERCISE_INDEX, \
         PAST_WORKOUT_DATA, \
+        EXERCISE_PATH, \
         RESET_STATE
 
     WAITING_FOR_INPUT = False
@@ -83,6 +85,7 @@ def reset_state():
     CURRENT_EXERCISE_INDEX = 0
 
     PAST_WORKOUT_DATA = {}
+    EXERCISE_PATH = []
 
     RESET_STATE = False
 
@@ -99,9 +102,8 @@ def handle_callback_query(call):
         WORKOUT_INDEX, \
         RESET_STATE, \
         USER_ID, \
-        PAST_WORKOUT_DATA
-
-    user = get_user_from_database(USER_ID)[0]
+        PAST_WORKOUT_DATA, \
+        EXERCISE_PATH
 
     if call.data == "choose_workouts":
         choose_workout(call=call)
@@ -133,13 +135,36 @@ def handle_callback_query(call):
     elif call.data == "list_workouts_for_workout_details":
         handle_view_workout(call)
 
+    elif call.data == "show_exercise_stats":
+        show_exercise_stats(call)
+
+    elif call.data == "choose_exercise_from_catalogue":
+        choose_exercise_from_catalogue(call)
+
+    elif call.data.startswith("choose_exercise_from_catalogue:"):
+        call.data = call.data.replace("choose_exercise_from_catalogue:", "")
+        if call.data == "go_back":
+            if EXERCISE_PATH:
+                EXERCISE_PATH = EXERCISE_PATH[:-1]
+            else:
+                # user already was in root level (movement groups) when they clicked go back
+                send_edited_message(
+                    "How would you like to add a new exercise?",
+                    call.message.id,
+                    reply_markup=add_exercise_markup())
+                return
+        else:
+            EXERCISE_PATH.append(call.data)
+        choose_exercise_from_catalogue(call, EXERCISE_PATH)
+
     elif call.data.startswith("START_WORKOUT:"):
+        user = get_user_from_database(USER_ID)[0]
         workout_id = call.data.replace("START_WORKOUT:", "")
         temp_workout = {}
         counter = 0
         # get workout data from users saved workouts
-        for node_id in user['saved_workouts']:
-            if user['saved_workouts'][node_id]['id'] == workout_id:
+        for node_id in user.get('saved_workouts'):
+            if user.get('saved_workouts').get(node_id).get('id') == workout_id:
                 temp_workout = user['saved_workouts'][node_id]
                 break
             counter += 1
@@ -149,35 +174,33 @@ def handle_callback_query(call):
             # get previous workout data from user's completed workouts that use the saved workout as a template
             PAST_WORKOUT_DATA = {node: workout
                                  for (node, workout) in user['completed_workouts'].items()
-                                 if user['completed_workouts'][node]['template_id'] == workout_id}
+                                 if user.get('completed_workouts').get(node).get('template_id') == workout_id}
 
         if temp_workout.get('exercises'):
             send_edited_message("Let's go! 💪", call.message.id)
             do_workout(workout_id=workout_id)
         else:
             send_edited_message(
-                f"{temp_workout['title']} has no exercises. Do you want to add some?",
+                f"{temp_workout.get('title')} has no exercises. Do you want to add some?",
                 call.message.id,
                 reply_markup=add_exercise_markup(comes_from="start_menu"))
-
-    elif call.data == "show_exercise_stats":
-        show_exercise_stats(call)
 
     elif call.data.startswith("DELETE_WORKOUT:"):
         workout_id = call.data.replace("DELETE_WORKOUT:", "")
         delete_workout(call=call, workout_id=workout_id)
 
     elif call.data.startswith("CONFIRM_DELETE_WORKOUT:"):
+        user = get_user_from_database(USER_ID)[0]
         workout_id = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
         workout = get_saved_workout_from_database(workout_id)
-        workout_title = workout['title']
+        workout_title = workout.get('title')
         if len(user['saved_workouts']) == 1:
             requests.delete(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json")
         else:
             user['saved_workouts'] = {
                 key: value
                 for (key, value) in user['saved_workouts'].items()
-                if user['saved_workouts'][key]['id'] != workout_id}
+                if user.get('saved_workouts').get(key).get('id') != workout_id}
             requests.put(
                 f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json",
                 json.dumps(user['saved_workouts']))
@@ -218,7 +241,7 @@ def initialize(message):
     MESSAGES.append(message)
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT['running'] and not RESET_STATE:
+    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -245,7 +268,7 @@ def begin_workout(message):
     MESSAGES.append(message)
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT['running'] and not RESET_STATE:
+    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -263,7 +286,7 @@ def create_workout(message):
     MESSAGES.append(message)
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT['running'] and not RESET_STATE:
+    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -300,7 +323,7 @@ def proceed_to_next(message):
         # user skipped the muscles worked entry
         add_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED", skip_setting=True)
 
-    elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX != len(WORKOUT['exercises']) - 1:
+    elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX != len(WORKOUT.get('exercises')) - 1:
         # display the next exercise in the workout to the user
         # if the user is on their last exercise, this logic is handled by the /done handler instead
         CURRENT_EXERCISE_INDEX += 1
@@ -319,7 +342,7 @@ def finish(message):
 
     MESSAGES.append(message)
 
-    if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT['exercises']) - 1:
+    if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.get('exercises')) - 1:
         # user is done with their workout. End workout and add it to their completed workouts
         WORKOUT['running'] = False
         res = requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/completed_workouts.json", json.dumps(WORKOUT))
@@ -346,7 +369,7 @@ def clear_dialog(message):
     MESSAGES.append(message)
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT['running'] and not RESET_STATE:
+    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -381,7 +404,7 @@ def handle_delete_workout(message):
     MESSAGES.append(message)
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT['running'] and not RESET_STATE:
+    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -389,7 +412,7 @@ def handle_delete_workout(message):
 
     user = get_user_from_database(USER_ID)[0]
 
-    if user['saved_workouts']:
+    if user.get('saved_workouts'):
         message_text = \
             "Which workout would you like to delete?\n\n" \
             "(Note: this doesn't affect your already completed workouts, so no worries)"
@@ -499,8 +522,8 @@ def add_user_to_database(user_id, user_first_name, user_last_name):
 
 def get_saved_workout_from_database(workout_id):
     user = get_user_from_database(USER_ID)[0]
-    for node_id in user['saved_workouts']:
-        if user['saved_workouts'][node_id]['id'] == workout_id:
+    for node_id in user.get('saved_workouts'):
+        if user.get('saved_workouts').get(node_id).get('id') == workout_id:
             return user['saved_workouts'][node_id]
 
 
@@ -560,7 +583,7 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 def choose_workout(call=None, comes_from=None):
     user = get_user_from_database(USER_ID)[0]
 
-    if user['saved_workouts']:
+    if user.get('saved_workouts'):
         message_text = "Which workout routine would you like to start?"
 
         if comes_from == "add_another_exercise":
@@ -716,6 +739,48 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
             add_exercise_to_database(EXERCISE, workout_index)
 
 
+def choose_exercise_from_catalogue(call, path=None):
+    """
+    :param call:
+    :param path: array containing the keys of the current path. That way this function knows where in the
+    dictionary to enter
+    :return:
+    """
+
+    with open("exercises.json", "r") as f:
+        exercise_data = json.loads(f.read())
+
+    # list view is used when listing exercises
+    # (as opposed to the grid view, which is used for movement groups and progressions)
+    list_view = False
+    if path:
+        if len(path) == 1:
+            message_text = "Progressions"
+        elif len(path) == 2:
+            message_text = "Exercises"
+            list_view = True
+        else:
+            message_text = "UNKNOWN"
+
+        current_keys = []
+        while path:
+            current_keys = exercise_data[path[0]].keys()
+            exercise_data = exercise_data[path[0]]
+            path = path[1:]
+
+        send_edited_message(
+            message_text,
+            call.message.id,
+            reply_markup=exercise_selector_markup(current_keys, list_view))
+    else:
+        movement_groups = exercise_data.keys()
+        send_edited_message(
+            "Movement Groups",
+            call.message.id,
+            reply_markup=exercise_selector_markup(movement_groups)
+        )
+
+
 def add_exercise_to_database(exercise, workout_index):
     user = get_user_from_database(USER_ID)[0]
     exercise_json = jsonpickle.encode(exercise, unpicklable=False)
@@ -776,13 +841,13 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
         WORKOUT['running'] = True
 
     # create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
-    exercise_node_ids = list(WORKOUT['exercises'])
+    exercise_node_ids = list(WORKOUT.get('exercises'))
     current_exercise_node_id = exercise_node_ids[CURRENT_EXERCISE_INDEX]
-    current_exercise = WORKOUT['exercises'][current_exercise_node_id]
+    current_exercise = WORKOUT.get('exercises').get(current_exercise_node_id)
 
     if not new_rep_entry:
         show_done = False
-        if current_exercise['id'] == WORKOUT['exercises'][exercise_node_ids[-1]]['id']:
+        if current_exercise.get('id') == WORKOUT.get('exercises').get(exercise_node_ids[-1]).get('id'):
             show_done = True
             # user is performing the last exercise
             message_text = \
@@ -880,17 +945,18 @@ def workout_completed():
     # send workout report
     # the report consists of: total rep amount | average reps per set for ever exercise.
     report = "📊 *Workout Report*\n\n"
-    for exercise_node_id in WORKOUT['exercises']:
-        exercise = WORKOUT['exercises'][exercise_node_id]
+    for exercise_node_id in WORKOUT.get('exercises'):
+        exercise = WORKOUT.get('exercises').get(exercise_node_id)
         if exercise.get('reps'):
             total = sum(exercise.get('reps'))
             sets = len(exercise.get('reps'))
         else:
             total = 0
             sets = 0
-        average = "0" if total == 0 else str(round(total / len(exercise['reps']), 1)).replace(".", "\\.")
+        average = "0" if total == 0 else str(round(total / len(exercise.get('reps')), 1)).replace(".", "\\.")
         report += \
-            f"*{exercise['name']}*\n_Total_: *{total}*\n_No\\. of sets_: *{sets}*\n_Average per set_: *{average}*\n\n"
+            f"*{exercise.get('name')}*\n_Total_: " \
+            f"*{total}*\n_No\\. of sets_: *{sets}*\n_Average per set_: *{average}*\n\n"
 
     # number pad custom keyboard is not needed anymore
     send_message(report, reply_markup=telebot.types.ReplyKeyboardRemove(), parse_mode="MarkdownV2")
@@ -906,7 +972,7 @@ def delete_workout(call, workout_id):
 def handle_view_workout(call=None):
     user = get_user_from_database(USER_ID)[0]
 
-    if user['saved_workouts']:
+    if user.get('saved_workouts'):
         if call:
             send_edited_message(
                 "Which workout would you like to view?",
@@ -931,23 +997,23 @@ def show_workout_details(call, workout_id):
 
 
 def stringify_workout(workout):
-    result_string = f"*{workout['title']}*\n"
-    result_string += f"_Duration: \\~ {workout['duration']} minutes_\n\n"
+    result_string = f"*{workout.get('title')}*\n"
+    result_string += f"_Duration: \\~ {workout.get('duration')} minutes_\n\n"
     if workout.get('exercises'):
         result_string += "_Exercises:_\n\n"
-        for node_id in workout['exercises']:
-            result_string += stringify_exercise(workout['exercises'][node_id]) + "\n"
+        for node_id in workout.get('exercises'):
+            result_string += stringify_exercise(workout.get('exercises').get(node_id)) + "\n"
 
     return result_string
 
 
 def stringify_exercise(exercise):
-    result_string = f"*{exercise['name'].capitalize()}*\n"
+    result_string = f"*{exercise.get('name').capitalize()}*\n"
     if exercise.get('video_link'):
-        result_string += f"[Video demonstration]({exercise['video_link']})\n"
+        result_string += f"[Video demonstration]({exercise.get('video_link')})\n"
     if exercise.get('muscles_worked'):
         result_string += "_muscles worked_:\n"
-        for muscle in exercise['muscles_worked']:
+        for muscle in exercise.get('muscles_worked'):
             result_string += "• " + muscle + "\n"
 
     return result_string
