@@ -23,10 +23,11 @@ def reset_state_answer_markup():
     return markup
 
 
-def add_exercise_markup():
+def add_exercise_markup(comes_from=None):
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("Add exercise", callback_data="add_exercise"))
-    markup.add(InlineKeyboardButton("Go back", callback_data="choose_workouts"))
+    if comes_from == "start_menu":
+        markup.add(InlineKeyboardButton("↩️ Go back", callback_data="choose_workouts"))
     return markup
 
 
@@ -59,9 +60,9 @@ def list_workouts_markup(workouts, comes_from=None):
         workout = workouts[node_id]
         markup.add(InlineKeyboardButton(workout['title'], callback_data=f"START_WORKOUT:{workout['id']}"))
     if comes_from == "add_another_exercise":
-        markup.add(InlineKeyboardButton("Go back", callback_data="exercise_added"))
+        markup.add(InlineKeyboardButton("↩️ Go back", callback_data="exercise_added"))
     else:
-        markup.add(InlineKeyboardButton("Go back", callback_data="start_menu"))
+        markup.add(InlineKeyboardButton("↩️ Go back", callback_data="start_menu"))
     return markup
 
 
@@ -75,7 +76,7 @@ def view_workout_details_markup(workouts):
 
 def return_to_view_workout_details_markup():
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Go back", callback_data="list_workouts_for_workout_details"))
+    markup.add(InlineKeyboardButton("↩️ Go back", callback_data="list_workouts_for_workout_details"))
     return markup
 
 

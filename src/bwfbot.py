@@ -2,13 +2,13 @@ import requests
 import yaml
 import json
 import jsonpickle
+import time
 
 from models.user import User
 from models.exercise import Exercise
 from models.workout import Workout
 from markups import *
 
-from time import sleep
 from uuid import uuid4
 
 # configuration
@@ -35,6 +35,7 @@ global \
     WAITING_FOR_MUSCLES_WORKED, \
     WAITING_FOR_SETUP_DONE, \
     WAITING_FOR_REP_COUNT, \
+    WAITING_FOR_USER_FEEDBACK, \
     CURRENT_EXERCISE_INDEX, \
     PAST_WORKOUT_DATA, \
     RESET_STATE
@@ -60,6 +61,7 @@ def reset_state():
         WAITING_FOR_MUSCLES_WORKED, \
         WAITING_FOR_SETUP_DONE, \
         WAITING_FOR_REP_COUNT, \
+        WAITING_FOR_USER_FEEDBACK, \
         CURRENT_EXERCISE_INDEX, \
         PAST_WORKOUT_DATA, \
         RESET_STATE
@@ -75,8 +77,9 @@ def reset_state():
     WAITING_FOR_EXERCISE_VIDEO_LINK = False
     WAITING_FOR_MUSCLES_WORKED = False
     WAITING_FOR_SETUP_DONE = False
-
     WAITING_FOR_REP_COUNT = False
+    WAITING_FOR_USER_FEEDBACK = False
+
     CURRENT_EXERCISE_INDEX = 0
 
     PAST_WORKOUT_DATA = {}
@@ -155,7 +158,7 @@ def handle_callback_query(call):
             send_edited_message(
                 f"{temp_workout['title']} has no exercises. Do you want to add some?",
                 call.message.id,
-                reply_markup=add_exercise_markup())
+                reply_markup=add_exercise_markup(comes_from="start_menu"))
 
     elif call.data == "show_exercise_stats":
         show_exercise_stats(call)
@@ -341,6 +344,7 @@ def clear_dialog(message):
         RESET_STATE
 
     MESSAGES.append(message)
+    remove_inline_replies()
 
     if WORKOUT and WORKOUT['running'] and not RESET_STATE:
         confirm_reset_state()
@@ -348,12 +352,23 @@ def clear_dialog(message):
 
     reset_state()
 
+    undeletable_messages = []
+
     send_message("Clearing chat...")
-    sleep(1.5)
+    time.sleep(1.5)
     while MESSAGES:
-        # TODO: handle for messages older than 24 hours
-        BOT.delete_message(CHAT_ID, MESSAGES[0].id)
+        threshold = 86400
+        if MESSAGES[0].date < int(time.time()) - threshold:
+            # telegram doesnt allow bots to delete messages older than 2 days. Use 1 day threshold to play it safe
+            undeletable_messages.append(MESSAGES[0])
+        else:
+            BOT.delete_message(CHAT_ID, MESSAGES[0].id)
         MESSAGES = MESSAGES[1:]
+
+    if undeletable_messages:
+        send_message(
+            "I'm sorry, sadly I am unable to delete messages that are older than a day."
+            "Please click 'clear history' in the chat options to remove everything.")
 
 
 @BOT.message_handler(commands=["delete"])
@@ -393,6 +408,14 @@ def view_workout(message):
     handle_view_workout()
 
 
+@BOT.message_handler(commands=["feedback"])
+def user_feedback(message):
+    global MESSAGES
+
+    MESSAGES.append(message)
+    handle_user_feedback()
+
+
 # only if bot is expecting user input
 # needs to be the very last handler!!
 @BOT.message_handler(func=lambda message: message.text)
@@ -409,7 +432,8 @@ def handle_user_input(message):
         WAITING_FOR_EXERCISE_NAME, \
         WAITING_FOR_EXERCISE_VIDEO_LINK, \
         WAITING_FOR_MUSCLES_WORKED, \
-        WAITING_FOR_REP_COUNT
+        WAITING_FOR_REP_COUNT, \
+        WAITING_FOR_USER_FEEDBACK
 
     # log all message ids
     MESSAGES.append(message)
@@ -430,6 +454,8 @@ def handle_user_input(message):
         elif WAITING_FOR_REP_COUNT:
             if message.text.isnumeric():
                 do_workout(True, message)
+        elif WAITING_FOR_USER_FEEDBACK:
+            handle_user_feedback(message)
 
 
 # ----------------- FUNCTIONS ------------------
@@ -942,6 +968,31 @@ def handle_community_request(call):
 
 def handle_explore_community():
     pass
+
+
+def handle_user_feedback(message=None):
+    global WAITING_FOR_INPUT, WAITING_FOR_USER_FEEDBACK
+
+    if not message:
+        send_message(
+            "How are you enjoying my service? "
+            "Is there anything you would like to me to include, or improve upon?"
+            "\nI am constantly trying to get better, so please pour your heart out!"
+        )
+        WAITING_FOR_INPUT = True
+        WAITING_FOR_USER_FEEDBACK = True
+    else:
+        # received message. post it to feedback node in firebase
+        feedback_object = json.dumps({
+            'user_id': message.from_user.id,
+            'feedback_text': message.text
+        })
+        res = requests.post(f"{DB_ROOT}/feedback.json", feedback_object)
+        print(res.status_code, res.text)
+
+        send_message("Thanks a lot for your feedback! 😊")
+        WAITING_FOR_INPUT = False
+        WAITING_FOR_USER_FEEDBACK = False
 
 
 def get_digit_as_word(index):
