@@ -4,8 +4,6 @@ import json
 import jsonpickle
 import time
 
-from models.user import User
-from models.exercise import Exercise
 from models.workout import Workout
 from markups import *
 
@@ -74,7 +72,7 @@ def reset_state():
     WORKOUT_INDEX = None
     WAITING_FOR_WORKOUT_TITLE = False
 
-    EXERCISE = Exercise()
+    EXERCISE = None
     WAITING_FOR_EXERCISE_NAME = False
     WAITING_FOR_EXERCISE_VIDEO_LINK = False
     WAITING_FOR_MUSCLES_WORKED = False
@@ -165,7 +163,7 @@ def handle_callback_query(call):
         # get workout data from users saved workouts
         for node_id in user.get('saved_workouts'):
             if user.get('saved_workouts').get(node_id).get('id') == workout_id:
-                temp_workout = user['saved_workouts'][node_id]
+                temp_workout = user.get('saved_workouts').get(node_id)
                 break
             counter += 1
         WORKOUT_INDEX = counter
@@ -173,7 +171,7 @@ def handle_callback_query(call):
         if user.get('completed_workouts'):
             # get previous workout data from user's completed workouts that use the saved workout as a template
             PAST_WORKOUT_DATA = {node: workout
-                                 for (node, workout) in user['completed_workouts'].items()
+                                 for (node, workout) in user.get('completed_workouts').items()
                                  if user.get('completed_workouts').get(node).get('template_id') == workout_id}
 
         if temp_workout.get('exercises'):
@@ -194,16 +192,17 @@ def handle_callback_query(call):
         workout_id = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
         workout = get_saved_workout_from_database(workout_id)
         workout_title = workout.get('title')
-        if len(user['saved_workouts']) == 1:
+        if len(user.get('saved_workouts')) == 1:
             requests.delete(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json")
         else:
             user['saved_workouts'] = {
                 key: value
-                for (key, value) in user['saved_workouts'].items()
+                for (key, value) in user.get('saved_workouts').items()
                 if user.get('saved_workouts').get(key).get('id') != workout_id}
+
             requests.put(
                 f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json",
-                json.dumps(user['saved_workouts']))
+                json.dumps(user.get('saved_workouts')))
 
         send_edited_message(f"Done! {workout_title} is gone from your saved workouts.", call.message.id)
 
@@ -255,8 +254,12 @@ def initialize(message):
     user, USER_NODE_ID = get_user_from_database(USER_ID)
     if not user:
         is_new_user = True
-        user, USER_NODE_ID = add_user_to_database(USER_ID, message.from_user.first_name, message.from_user.last_name)
-    show_start_options(is_new_user, username=user['first_name'])
+        user, USER_NODE_ID = add_user_to_database(
+            USER_ID,
+            message.from_user.first_name,
+            message.from_user.last_name,
+            message.from_user.username)
+    show_start_options(is_new_user, username=user.get('first_name'))
 
 
 @BOT.message_handler(commands=["begin"])
@@ -417,7 +420,7 @@ def handle_delete_workout(message):
             "Which workout would you like to delete?\n\n" \
             "(Note: this doesn't affect your already completed workouts, so no worries)"
 
-        send_message(message_text, reply_markup=delete_workout_markup(user['saved_workouts']))
+        send_message(message_text, reply_markup=delete_workout_markup(user.get('saved_workouts')))
     else:
         send_message("You don't have any stored workouts.")
 
@@ -510,11 +513,15 @@ def get_user_from_database(user_id):
     return user, node_id
 
 
-def add_user_to_database(user_id, user_first_name, user_last_name):
+def add_user_to_database(user_id, first_name, last_name, username):
     global DB_ROOT
-
-    new_user = User(user_id, user_first_name, user_last_name)
-    new_user_json = jsonpickle.encode(new_user, unpicklable=False)
+    new_user = {
+        "id": user_id,
+        "first_name": first_name,
+        "last_name": last_name,
+        "username": username
+    }
+    new_user_json = json.dumps(new_user)
     res = requests.post(f"{DB_ROOT}/users.json", new_user_json)
     print(res.status_code, res.text)
     return get_user_from_database(user_id)
@@ -524,7 +531,7 @@ def get_saved_workout_from_database(workout_id):
     user = get_user_from_database(USER_ID)[0]
     for node_id in user.get('saved_workouts'):
         if user.get('saved_workouts').get(node_id).get('id') == workout_id:
-            return user['saved_workouts'][node_id]
+            return user.get('saved_workouts').get(node_id)
 
 
 def show_start_options(is_new_user=False, call=None, username="username"):
@@ -587,9 +594,9 @@ def choose_workout(call=None, comes_from=None):
         message_text = "Which workout routine would you like to start?"
 
         if comes_from == "add_another_exercise":
-            reply_markup = list_workouts_markup(user['saved_workouts'], comes_from="add_another_exercise")
+            reply_markup = list_workouts_markup(user.get('saved_workouts'), comes_from="add_another_exercise")
         else:
-            reply_markup = list_workouts_markup(user['saved_workouts'])
+            reply_markup = list_workouts_markup(user.get('saved_workouts'))
 
         if call:
             send_edited_message(
@@ -700,8 +707,8 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
         WAITING_FOR_EXERCISE_NAME = True
     else:
         if message_type == "EXERCISE_NAME":
-            EXERCISE = Exercise()
-            EXERCISE.name = message.text
+            EXERCISE = dict()
+            EXERCISE['name'] = message.text
             WAITING_FOR_EXERCISE_NAME = False
             # retrieved exercise name. Ask for youtube link
             send_message(
@@ -712,7 +719,7 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
         elif message_type == "EXERCISE_VIDEO_LINK":
             WAITING_FOR_EXERCISE_VIDEO_LINK = False
             if not skip_setting:
-                EXERCISE.video_link = message.text
+                EXERCISE['video_link'] = message.text
 
             # muscles worked here
             send_message(
@@ -726,8 +733,8 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
                 # handle for empty entries (e.g ", , chest, ,")
                 muscles_worked = [x.strip() for x in message.text.split(",")]
                 muscles_worked = [x for x in muscles_worked if x]
-                muscles_worked = [muscle.strip().capitalize() for muscle in muscles_worked]
-                EXERCISE.muscles_worked = muscles_worked
+                muscles_worked = [muscle.strip().title() for muscle in muscles_worked]
+                EXERCISE['muscles_worked'] = muscles_worked
 
             # done. Add workout to users workouts.
             WAITING_FOR_INPUT = False
@@ -783,11 +790,11 @@ def choose_exercise_from_catalogue(call, path=None):
 
 def add_exercise_to_database(exercise, workout_index):
     user = get_user_from_database(USER_ID)[0]
-    exercise_json = jsonpickle.encode(exercise, unpicklable=False)
-    workout_node_id = list(user['saved_workouts'])[workout_index]
+    exercise_json = json.dumps(exercise)
+    workout_node_id = list(user.get('saved_workouts'))[workout_index]
     res = requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises.json",
                         exercise_json)
-    print(res.status_code, res.text)
+    print(f"add_exercise_to_database request returned {res.status_code}")
 
     exercise_added()
 
@@ -800,18 +807,18 @@ def exercise_added(call=None):
     user = get_user_from_database(USER_ID)[0]
 
     workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
-    workout_node_id = list(user['saved_workouts'])[workout_index]
+    workout_node_id = list(user.get('saved_workouts'))[workout_index]
 
     message_text = \
         f"Exercise summary:\n\n" \
-        f"{str(EXERCISE)}\n"
+        f"{stringify_exercise(EXERCISE)}\n"
     if call:
         send_edited_message(message_text, call.message.id, parse_mode="MarkdownV2")
     else:
         send_message(message_text, parse_mode="MarkdownV2")
 
     confirmation = \
-        f"Added {EXERCISE.name} to {user['saved_workouts'][workout_node_id]['title']}!\n" \
+        f"Added {EXERCISE.get('name')} to {user.get('saved_workouts').get(workout_node_id).get('title')}!\n" \
         f"Would you like to add another exercise?"
 
     send_message(confirmation, reply_markup=add_another_exercise_markup())
@@ -890,8 +897,8 @@ def show_exercise_stats(call):
     message_text = ""
 
     for workout_node_id in PAST_WORKOUT_DATA:
-        current_exercise_node_id = list(PAST_WORKOUT_DATA[workout_node_id]['exercises'])[CURRENT_EXERCISE_INDEX]
-        current_exercise = PAST_WORKOUT_DATA[workout_node_id]['exercises'][current_exercise_node_id]
+        current_exercise_node_id = list(PAST_WORKOUT_DATA.get(workout_node_id).get('exercises'))[CURRENT_EXERCISE_INDEX]
+        current_exercise = PAST_WORKOUT_DATA.get(workout_node_id).get('exercises').get(current_exercise_node_id)
         exercise_performance_history.append(current_exercise.get('reps') or [])
 
     # [[1,2,3] , [1,2,3,4] , [1,2,3,4,5]] --> most sets: 5 ([1,2,3,4,5])
@@ -955,7 +962,7 @@ def workout_completed():
             sets = 0
         average = "0" if total == 0 else str(round(total / len(exercise.get('reps')), 1)).replace(".", "\\.")
         report += \
-            f"*{exercise.get('name')}*\n_Total_: " \
+            f"*{prepare_for_markdown_v2(exercise.get('name'))}*\n_Total_: " \
             f"*{total}*\n_No\\. of sets_: *{sets}*\n_Average per set_: *{average}*\n\n"
 
     # number pad custom keyboard is not needed anymore
@@ -977,11 +984,11 @@ def handle_view_workout(call=None):
             send_edited_message(
                 "Which workout would you like to view?",
                 call.message.id,
-                reply_markup=view_workout_details_markup(user['saved_workouts']))
+                reply_markup=view_workout_details_markup(user.get('saved_workouts')))
         else:
             send_message(
                 "Which workout would you like to view?",
-                reply_markup=view_workout_details_markup(user['saved_workouts']))
+                reply_markup=view_workout_details_markup(user.get('saved_workouts')))
     else:
         send_message("You don't have any stored workouts.")
 
@@ -997,7 +1004,7 @@ def show_workout_details(call, workout_id):
 
 
 def stringify_workout(workout):
-    result_string = f"*{workout.get('title')}*\n"
+    result_string = f"*{prepare_for_markdown_v2(workout.get('title').title())}*\n"
     result_string += f"_Duration: \\~ {workout.get('duration')} minutes_\n\n"
     if workout.get('exercises'):
         result_string += "_Exercises:_\n\n"
@@ -1008,15 +1015,23 @@ def stringify_workout(workout):
 
 
 def stringify_exercise(exercise):
-    result_string = f"*{exercise.get('name').capitalize()}*\n"
+    result_string = f"*{prepare_for_markdown_v2(exercise.get('name').title())}*\n"
     if exercise.get('video_link'):
         result_string += f"[Video demonstration]({exercise.get('video_link')})\n"
     if exercise.get('muscles_worked'):
         result_string += "_muscles worked_:\n"
         for muscle in exercise.get('muscles_worked'):
-            result_string += "• " + muscle + "\n"
+            result_string += "• " + prepare_for_markdown_v2(muscle) + "\n"
 
     return result_string
+
+
+def prepare_for_markdown_v2(string):
+    special_characters = ["_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"]
+    for character in special_characters:
+        string = string.replace(character, f"\\{character}")
+
+    return string
 
 
 def remove_inline_replies():
