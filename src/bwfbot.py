@@ -761,24 +761,30 @@ def choose_exercise_from_catalogue(call, path=None):
     # (as opposed to the grid view, which is used for movement groups and progressions)
     list_view = False
     if path:
-        if len(path) == 1:
-            message_text = "Progressions"
-        elif len(path) == 2:
-            message_text = "Exercises"
-            list_view = True
+        if len(path) == 3:
+            # user has clicked on an exercise. Show exercise details
+            message_text = stringify_exercise(exercise_data.get(path[0]).get(path[1]).get(path[2]))
+            send_edited_message(message_text, call.message.id, parse_mode="MarkdownV2")
+
         else:
-            message_text = "UNKNOWN"
+            if len(path) == 1:
+                message_text = "Progressions"
+            elif len(path) == 2:
+                message_text = "Exercises"
+                list_view = True
+            else:
+                message_text = "UNKNOWN"
 
-        current_keys = []
-        while path:
-            current_keys = exercise_data[path[0]].keys()
-            exercise_data = exercise_data[path[0]]
-            path = path[1:]
+            current_keys = []
+            while path:
+                current_keys = exercise_data[path[0]].keys()
+                exercise_data = exercise_data[path[0]]
+                path = path[1:]
 
-        send_edited_message(
-            message_text,
-            call.message.id,
-            reply_markup=exercise_selector_markup(current_keys, list_view))
+            send_edited_message(
+                message_text,
+                call.message.id,
+                reply_markup=exercise_selector_markup(current_keys, list_view))
     else:
         movement_groups = exercise_data.keys()
         send_edited_message(

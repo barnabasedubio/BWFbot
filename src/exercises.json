@@ -3,7 +3,7 @@
     "HSPU": {
       "Pike Push Ups": {
         "name": "Pike Push Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/h0HjqYRlXYg?t=36",
         "muscles_worked": [
           "Front Delts",
           "Triceps"
@@ -11,7 +11,7 @@
       },
       "Elevated Pike Push Ups": {
         "name": "Elevated Pike Push Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/VnQU_lLBFW0?t=124",
         "muscles_worked": [
           "Front Delts",
           "Triceps"
@@ -19,15 +19,31 @@
       },
       "Wall Handstand Negatives": {
         "name": "Wall Handstand Negatives",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/h0HjqYRlXYg?t=164",
         "muscles_worked": [
           "Front Delts",
           "Triceps"
         ]
       },
-      "Full Handstand Push Ups": {
-        "name": "Full Handstand Push Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+      "Free Handstand Negatives": {
+        "name": "Free Handstand Negatives",
+        "video_link": "https://youtu.be/h0HjqYRlXYg?t=192",
+        "muscles_worked": [
+          "Front Delts",
+          "Triceps"
+        ]
+      },
+      "Wall Handstand Push Ups": {
+        "name": "Wall Handstand Push Ups",
+        "video_link": "https://youtu.be/h0HjqYRlXYg?t=185",
+        "muscles_worked": [
+          "Front Delts",
+          "Triceps"
+        ]
+      },
+      "Free Handstand Push Ups": {
+        "name": "Free Handstand Push Ups",
+        "video_link": "https://youtu.be/h0HjqYRlXYg?t=3",
         "muscles_worked": [
           "Front Delts",
           "Triceps"
@@ -35,9 +51,17 @@
       }
     },
     "Dip": {
+      "Box Dips": {
+        "name": "Box Dips",
+        "video_link": "https://youtu.be/eQ4GKdK_Xps?t=329",
+        "muscles_worked": [
+          "Triceps",
+          "Lower Chest"
+        ]
+      },
       "Bar Dips": {
         "name": "Bar Dips",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/eQ4GKdK_Xps?t=336",
         "muscles_worked": [
           "Triceps",
           "Lower Chest"
@@ -45,7 +69,7 @@
       },
       "Ring Dips": {
         "name": "Ring Dips",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/eQ4GKdK_Xps?t=344",
         "muscles_worked": [
           "Front Delts",
           "Triceps"
@@ -53,7 +77,7 @@
       },
       "Bulgarian Ring Dips": {
         "name": "Bulgarian Ring Dips",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/iC2LLN7cuFs?t=34",
         "muscles_worked": [
           "Lateral Delts",
           "Chest",
@@ -66,7 +90,7 @@
     "Pull Up": {
       "Pull Up Negatives": {
         "name": "Pull Up Negatives",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/gbPURTSxQLY?t=2",
         "muscles_worked": [
           "Lats",
           "Traps"
@@ -74,15 +98,7 @@
       },
       "Pull Ups": {
         "name": "Pull Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
-        "muscles_worked": [
-          "Lats",
-          "Traps"
-        ]
-      },
-      "Offset Pull Ups": {
-        "name": "Offset Pull Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://www.youtube.com/watch?v=eGo4IYlbE5g",
         "muscles_worked": [
           "Lats",
           "Traps"
@@ -92,7 +108,7 @@
     "Chin Up": {
       "Chin Up Negatives": {
         "name": "Chin Up Negatives",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/lrO7G8Idd3Y?t=87",
         "muscles_worked": [
           "Biceps",
           "Posterior Delts",
@@ -102,17 +118,7 @@
       },
       "Chin Ups": {
         "name": "Chin Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
-        "muscles_worked": [
-          "Biceps",
-          "Posterior Delts",
-          "Lats",
-          "Brachialis"
-        ]
-      },
-      "Offset Chin Ups": {
-        "name": "Offset Chin Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/UfhT0OSUU0w?t=11",
         "muscles_worked": [
           "Biceps",
           "Posterior Delts",
@@ -124,9 +130,9 @@
   },
   "Horizontal Push":  {
     "Push Up": {
-      "Box Push Ups": {
-        "name": "Box Push Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+      "Incline Push Ups": {
+        "name": "Incline Push Ups",
+        "video_link": "https://youtu.be/Me9bHFAxnCs?t=9",
         "muscles_worked": [
           "Chest",
           "Delts",
@@ -136,7 +142,7 @@
       },
       "Knee Push Ups": {
         "name": "Knee Push Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/WcHtt6zT3Go?t=13",
         "muscles_worked": [
           "Chest",
           "Delts",
@@ -146,7 +152,7 @@
       },
       "Push Ups": {
         "name": "Push Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://www.youtube.com/watch?v=IODxDxX7oi4",
         "muscles_worked": [
           "Chest",
           "Delts",
@@ -154,9 +160,9 @@
           "Abs"
         ]
       },
-      "Elevated Push Ups": {
-        "name": "Elevated Push Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+      "Decline Push Ups": {
+        "name": "Decline Push Ups",
+        "video_link": "https://youtu.be/SKPab2YC8BE?t=42",
         "muscles_worked": [
           "Chest",
           "Delts",
@@ -166,7 +172,7 @@
       },
       "Diamond Push Ups": {
         "name": "Diamond Push Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/J0DnG1_S92I?t=49",
         "muscles_worked": [
           "Chest",
           "Delts",
@@ -176,17 +182,7 @@
       },
       "Archer Push Ups": {
         "name": "Archer Push Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
-        "muscles_worked": [
-          "Chest",
-          "Delts",
-          "Triceps",
-          "Abs"
-        ]
-      },
-      "One Armed Push Ups": {
-        "name": "One Armed Push Ups",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/A0r8ploEnZY?t=48",
         "muscles_worked": [
           "Chest",
           "Delts",
@@ -200,7 +196,7 @@
     "Row": {
       "Inverted Rows": {
         "name": "Inverted Rows",
-        "video_link": "www.youtube.com/watch/v/DdQw4w9WgXcQ",
+        "video_link": "https://youtu.be/eQ4GKdK_Xps?t=228",
         "muscles_worked": [
           "Back",
           "Biceps",
@@ -210,19 +206,170 @@
       },
       "Elevated Rows": {
         "name": "Elevated Rows",
-        "video_link": ""
+        "video_link": "https://youtu.be/eQ4GKdK_Xps?t=234",
+        "muscles_worked": [
+          "Back",
+          "Biceps",
+          "Forearms",
+          "Posterior Delts"
+        ]
+      },
+      "Archer Rows": {
+        "name": "Archer Rows",
+        "video_link": "https://www.youtube.com/watch?v=RZctH9Fj6K8",
+        "muscles_worked": [
+          "Back",
+          "Biceps",
+          "Forearms",
+          "Posterior Delts"
+        ]
       }
     }
   },
   "Core":  {
-    "L-Sit": {},
-    "Dragon Flag": {},
-    "Leg Raise": {},
-    "Windshield Wiper": {}
+    "Dragon Flag": {
+      "Dragon Flag Extensions": {
+        "name": "Dragon Flag Extensions",
+        "video_link": "https://youtu.be/pvz7k5gO-DE?t=124",
+        "muscles_worked": ["Abs", "Obliques", "Glutes"]
+      },
+      "One Legged Dragon Flag Negatives": {
+        "name": "One Legged Dragon Flag Negatives",
+        "video_link": "https://www.youtube.com/watch?v=8nzdzIoPW2A",
+        "muscles_worked": ["Abs", "Obliques", "Glutes"]
+      },
+      "Tucked Dragon Flags": {
+        "name": "Tucked Dragon Flags",
+        "video_link": "https://youtu.be/pvz7k5gO-DE?t=182",
+        "muscles_worked": ["Abs", "Obliques", "Glutes"]
+      },
+      "Straddle Dragon Flags": {
+        "name": "Straddle Dragon Flags",
+        "video_link": "https://youtu.be/pvz7k5gO-DE?t=199",
+        "muscles_worked": ["Abs", "Obliques", "Glutes"]
+      },
+      "Dragon Flags": {
+        "name": "Dragon Flags",
+        "video_link": "https://youtu.be/pvz7k5gO-DE?t=214",
+        "muscles_worked": ["Abs", "Obliques", "Glutes"]
+      }
+    },
+    "Knee Raise": {
+      "Knee Raises": {
+        "name": "Knee Raises",
+        "video_link": "https://youtu.be/NMgWyTivrTI?t=720",
+        "muscles_worked": ["Abs", "Obliques", "Hip Flexors", "Forearms"]
+      }
+    },
+    "Windshield Wiper": {
+      "Tucked Floor Windshield Wipers": {
+        "name": "Tucked Floor Windshield Wipers",
+        "video_link": "https://youtu.be/X59_4RrU_aA?t=18",
+        "muscles_worked": ["Abs", "Obliques"]
+      },
+      "Floor Windshield Wipers": {
+        "name": "Floor Windshield Wipers",
+        "video_link": "https://youtu.be/X59_4RrU_aA?t=35",
+        "muscles_worked": ["Abs", "Obliques"]
+      },
+      "Tucked Windshield Wipers": {
+        "name": "Tucked Windshield Wipers",
+        "video_link": "https://youtu.be/af-20PyuwgI?t=60",
+        "muscles_worked": ["Abs", "Obliques"]
+      },
+      "Hanging Windshield Wipers": {
+        "name": "Windshield Wipers",
+        "video_link": "https://youtu.be/af-20PyuwgI?t=27",
+        "muscles_worked": ["Abs", "Obliques"]
+      }
+    }
   },
   "Legs": {
-    "Squat": {},
-    "Curl": {},
-    "Calf Raise": {}
+    "Squat": {
+      "Squats": {
+        "name": "Squats",
+        "video_link": "https://youtu.be/aclHkVaku9U?t=34",
+        "muscles_worked": [
+          "Quads",
+          "Glutes",
+          "Hamstrings"
+        ]
+      },
+      "Bulgarian Split Squats": {
+        "name": "Bulgarian Split Squats",
+        "video_link": "https://youtu.be/2C-uNgKwPLE?t=56",
+        "muscles_worked": [
+          "Quads",
+          "Glutes",
+          "Hamstrings"
+        ]
+      },
+      "Beginner Shrimp Squats": {
+        "name": "Beginner Shrimp Squats",
+        "video_link": "https://youtu.be/TKt0-c83GSc?t=189",
+        "muscles_worked": [
+          "Quads",
+          "Glutes",
+          "Hamstrings"
+        ]
+      },
+      "Intermediate Shrimp Squats": {
+        "name": "Intermediate Shrimp Squats",
+        "video_link": "https://youtu.be/Dpgn6eRtsdw?t=26",
+        "muscles_worked": [
+          "Quads",
+          "Glutes",
+          "Hamstrings"
+        ]
+      },
+      "Advanced Shrimp Squats": {
+        "name": "Advanced Shrimp Squats",
+        "video_link": "https://youtu.be/Ibp8yWerUgc?t=89",
+        "muscles_worked": [
+          "Quads",
+          "Glutes",
+          "Hamstrings"
+        ]
+      }
+    },
+    "Hinge": {
+      "Romanian Deadlift": {
+        "name": "Romanian Deadlift",
+        "video_link": "https://youtu.be/Rg-FORTdUW0?t=10",
+        "muscles_worked": ["Glutes", "Hamstrings"]
+      },
+      "Single Legged Deadlift": {
+        "name": "Single Legged Deadlift",
+        "video_link": "https://youtu.be/HtHxnWmMgzM?t=10",
+        "muscles_worked": ["Glutes", "Hamstrings"]
+      },
+      "Banded Nordic Curl Negatives": {
+        "name": "Banded Nordic Curl Negatives",
+        "video_link": "https://youtu.be/HUXS3S2xSX4?t=58",
+        "muscles_worked": ["Hamstrings"]
+      },
+      "Banded Nordic Curl": {
+        "name": "Banded Nordic Curl",
+        "video_link": "https://youtu.be/HUXS3S2xSX4?t=58",
+        "muscles_worked": ["Hamstrings"]
+      },
+      "Nordic Curl": {
+        "name": "Nordic Curl",
+        "video_link": "https://www.youtube.com/watch?v=_OyHDWeJHFM",
+        "muscles_worked": ["Hamstrings"]
+      }
+    },
+    "Calf Raise": {
+      "Calf Raises": {
+        "name": "Calf Raises",
+        "video_link": "https://youtu.be/TZrBb5M1CdM?t=33",
+        "muscles_worked": ["Calves"]
+      },
+      "Single-Legged Calf Raises": {
+        "name": "Single-Legged Calf Raises",
+        "video_link": "https://www.youtube.com/watch?v=Tla2ScHQgu0",
+        "muscles_worked": ["Calves"]
+      }
+    }
   }
 }
