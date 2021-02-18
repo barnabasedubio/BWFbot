@@ -21,13 +21,3 @@ class Workout:
 		self.saves = 0
 		self.exercises = []
 		self.running = False
-
-	def __str__(self):
-		title_string = f"*{self.title}*\n\n"
-		length_string = f"_Duration: \\~ {self.duration} minutes_\n"
-		exercises_string = ""
-		if self.exercises:
-			exercises_string = f"\nExercises:\n\n"
-			for exercise in self.exercises:
-				exercises_string += str(exercise) + "\n\n"
-		return f"{title_string}{length_string}{exercises_string}"
