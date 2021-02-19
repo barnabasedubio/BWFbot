@@ -3,7 +3,7 @@ import json
 import time
 
 import firebase_admin
-import firebase_admin.auth
+from firebase_admin import auth as AUTH
 from firebase_admin import db as DB
 
 from markups import *
@@ -488,7 +488,7 @@ def get_user_from_database(user_id):
 
     try:
         # check if user exists
-        user = firebase_admin.auth.get_user(user_id)
+        user = AUTH.get_user(user_id)
 
         # get database data for user
         user_data = DB.reference("/users").order_by_child("id").equal_to(user.uid).get()
@@ -497,13 +497,13 @@ def get_user_from_database(user_id):
         user_data = user_data.get(USER_NODE_ID)
         return user_data
 
-    except firebase_admin.auth.UserNotFoundError:
+    except AUTH.UserNotFoundError:
         return None
 
 
 def add_user_to_database(user_id, first_name, last_name, username):
 
-    user = firebase_admin.auth.create_user(
+    user = AUTH.create_user(
         uid=str(user_id),
         display_name=first_name
     )
