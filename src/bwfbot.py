@@ -15,11 +15,9 @@ with open("../config.yml", "r") as fp:
     CONFIG = yaml.load(fp, yaml.FullLoader)
 
 TOKEN = CONFIG.get("telegram").get("token")
-DB_ROOT = CONFIG.get("firebase").get("reference")  # should not be
-
 CRED = firebase_admin.credentials.Certificate("../firebase_service_account_key_SECRET.json")
-firebase_admin.initialize_app(CRED, {"databaseURL": DB_ROOT})
 
+firebase_admin.initialize_app(CRED, {"databaseURL": CONFIG.get("firebase").get("reference")})
 
 BOT = telebot.TeleBot(TOKEN)
 USER_ID = None
@@ -32,7 +30,9 @@ global \
     WORKOUT, \
     WORKOUT_INDEX, \
     WAITING_FOR_WORKOUT_TITLE, \
-    EXERCISE, \
+    CUSTOM_EXERCISE, \
+    CATALOGUE_EXERCISE, \
+    MOST_RECENTLY_ADDED_EXERCISE, \
     WAITING_FOR_EXERCISE_NAME, \
     WAITING_FOR_EXERCISE_VIDEO_LINK, \
     WAITING_FOR_MUSCLES_WORKED, \
@@ -59,7 +59,9 @@ def reset_state():
         WORKOUT, \
         WORKOUT_INDEX, \
         WAITING_FOR_WORKOUT_TITLE, \
-        EXERCISE, \
+        CUSTOM_EXERCISE, \
+        CATALOGUE_EXERCISE, \
+        MOST_RECENTLY_ADDED_EXERCISE, \
         WAITING_FOR_EXERCISE_NAME, \
         WAITING_FOR_EXERCISE_VIDEO_LINK, \
         WAITING_FOR_MUSCLES_WORKED, \
@@ -77,7 +79,10 @@ def reset_state():
     WORKOUT_INDEX = None
     WAITING_FOR_WORKOUT_TITLE = False
 
-    EXERCISE = None
+    CUSTOM_EXERCISE = None
+    CATALOGUE_EXERCISE = None
+    MOST_RECENTLY_ADDED_EXERCISE = None
+
     WAITING_FOR_EXERCISE_NAME = False
     WAITING_FOR_EXERCISE_VIDEO_LINK = False
     WAITING_FOR_MUSCLES_WORKED = False
@@ -106,7 +111,8 @@ def handle_callback_query(call):
         RESET_STATE, \
         USER_ID, \
         PAST_WORKOUT_DATA, \
-        EXERCISE_PATH
+        EXERCISE_PATH, \
+        CATALOGUE_EXERCISE
 
     if call.data == "choose_workouts":
         choose_workout(call=call)
@@ -122,6 +128,9 @@ def handle_callback_query(call):
 
     elif call.data == "add_exercise":
         add_exercise(call=call)
+
+    elif call.data == "add_catalogue_exercise":
+        add_catalogue_exercise(call, CATALOGUE_EXERCISE)
 
     elif call.data == "explore_community":
         handle_explore_community()
@@ -700,7 +709,8 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
     """
 
     global \
-        EXERCISE, \
+        CUSTOM_EXERCISE, \
+        MOST_RECENTLY_ADDED_EXERCISE, \
         WAITING_FOR_INPUT, \
         WAITING_FOR_EXERCISE_NAME, \
         WAITING_FOR_EXERCISE_VIDEO_LINK, \
@@ -716,9 +726,9 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
         WAITING_FOR_EXERCISE_NAME = True
     else:
         if message_type == "EXERCISE_NAME":
-            EXERCISE = dict()
-            EXERCISE["id"] = str(uuid4())
-            EXERCISE['name'] = message.text
+            CUSTOM_EXERCISE = dict()
+            CUSTOM_EXERCISE["id"] = str(uuid4())
+            CUSTOM_EXERCISE['name'] = message.text
             WAITING_FOR_EXERCISE_NAME = False
             # retrieved exercise name. Ask for youtube link
             send_message(
@@ -729,7 +739,7 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
         elif message_type == "EXERCISE_VIDEO_LINK":
             WAITING_FOR_EXERCISE_VIDEO_LINK = False
             if not skip_setting:
-                EXERCISE['video_link'] = message.text
+                CUSTOM_EXERCISE['video_link'] = message.text
 
             # muscles worked here
             send_message(
@@ -744,7 +754,7 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
                 muscles_worked = [x.strip() for x in message.text.split(",")]
                 muscles_worked = [x for x in muscles_worked if x]
                 muscles_worked = [muscle.strip().title() for muscle in muscles_worked]
-                EXERCISE['muscles_worked'] = muscles_worked
+                CUSTOM_EXERCISE['muscles_worked'] = muscles_worked
 
             # done. Add workout to users workouts.
             WAITING_FOR_INPUT = False
@@ -753,7 +763,12 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
             # unless specified (WORKOUT_INDEX not None)
             workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
 
-            add_exercise_to_database(EXERCISE, workout_index)
+            add_exercise_to_database(CUSTOM_EXERCISE, workout_index)
+
+            # the most recently added exercise was this one, so update the global variable
+            MOST_RECENTLY_ADDED_EXERCISE = CUSTOM_EXERCISE
+
+            exercise_added()
 
 
 def choose_exercise_from_catalogue(call, path=None):
@@ -763,6 +778,7 @@ def choose_exercise_from_catalogue(call, path=None):
     dictionary to enter
     :return:
     """
+    global CATALOGUE_EXERCISE
 
     with open("exercises.json", "r") as f:
         exercise_data = json.loads(f.read())
@@ -773,8 +789,14 @@ def choose_exercise_from_catalogue(call, path=None):
     if path:
         if len(path) == 3:
             # user has clicked on an exercise. Show exercise details
-            message_text = stringify_exercise(exercise_data.get(path[0]).get(path[1]).get(path[2]))
-            send_edited_message(message_text, call.message.id, parse_mode="MarkdownV2")
+            CATALOGUE_EXERCISE = exercise_data.get(path[0]).get(path[1]).get(path[2])
+            message_text = stringify_exercise(CATALOGUE_EXERCISE)
+            send_edited_message(
+                message_text,
+                call.message.id,
+                reply_markup=add_catalogue_exercise_markup(),
+                parse_mode="MarkdownV2"
+            )
 
         else:
             if len(path) == 1:
@@ -787,8 +809,8 @@ def choose_exercise_from_catalogue(call, path=None):
 
             current_keys = []
             while path:
-                current_keys = exercise_data[path[0]].keys()
-                exercise_data = exercise_data[path[0]]
+                current_keys = exercise_data.get(path[0]).keys()
+                exercise_data = exercise_data.get(path[0])
                 path = path[1:]
 
             send_edited_message(
@@ -804,37 +826,57 @@ def choose_exercise_from_catalogue(call, path=None):
         )
 
 
+def add_catalogue_exercise(call, catalogue_exercise):
+    global \
+        WORKOUT_INDEX, \
+        MOST_RECENTLY_ADDED_EXERCISE, \
+        EXERCISE_PATH
+
+    workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
+    add_exercise_to_database(catalogue_exercise, workout_index)
+
+    # the most recently added exercise was this one, so update the global variable
+    MOST_RECENTLY_ADDED_EXERCISE = catalogue_exercise
+
+    # reset the exercise path
+    EXERCISE_PATH = []
+
+    exercise_added(call)
+
+
 def add_exercise_to_database(exercise, workout_index):
     user = get_user_from_database(USER_ID)
     workout_node_id = list(user.get('saved_workouts'))[workout_index]
     DB.reference(f"/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises/").push(exercise)
 
-    exercise_added()
-
 
 def exercise_added(call=None):
     global \
         WORKOUT_INDEX, \
-        EXERCISE
+        MOST_RECENTLY_ADDED_EXERCISE
+
+    remove_inline_replies()
 
     user = get_user_from_database(USER_ID)
 
     workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
     workout_node_id = list(user.get('saved_workouts'))[workout_index]
 
-    message_text = \
+    exercise_summary_text = \
         f"Exercise summary:\n\n" \
-        f"{stringify_exercise(EXERCISE)}\n"
-    if call:
-        send_edited_message(message_text, call.message.id, parse_mode="MarkdownV2")
-    else:
-        send_message(message_text, parse_mode="MarkdownV2")
+        f"{stringify_exercise(MOST_RECENTLY_ADDED_EXERCISE)}\n"
 
-    confirmation = \
-        f"Added {EXERCISE.get('name')} to {user.get('saved_workouts').get(workout_node_id).get('title')}!\n" \
+    confirmation_text = \
+        f"Added {prepare_for_markdown_v2(MOST_RECENTLY_ADDED_EXERCISE.get('name'))} to " \
+        f"{user.get('saved_workouts').get(workout_node_id).get('title')}\\!\n" \
         f"Would you like to add another exercise?"
 
-    send_message(confirmation, reply_markup=add_another_exercise_markup())
+    message_text = exercise_summary_text + "\n" + confirmation_text
+
+    if call:
+        send_edited_message(message_text, call.message.id, parse_mode="MarkdownV2", reply_markup=add_another_exercise_markup())
+    else:
+        send_message(message_text, parse_mode="MarkdownV2", reply_markup=add_another_exercise_markup())
 
 
 def do_workout(new_rep_entry=False, message=None, workout_id=None):
@@ -872,7 +914,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
             show_done = True
             # user is performing the last exercise
             message_text = \
-                f"Almost done\\!\n" \
+                f"Almost done\\!\n\n" \
                 f"{stringify_exercise(current_exercise)}\n" \
                 f"Send me the rep count for each set\\. Once you're done, click /finish\\."
 

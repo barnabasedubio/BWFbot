@@ -25,7 +25,7 @@ def reset_state_answer_markup():
 
 def add_exercise_markup(comes_from=None):
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("➕ Add custom exercise", callback_data="add_exercise"))
+    markup.add(InlineKeyboardButton("✍️ Add custom exercise", callback_data="add_exercise"))
     markup.add(InlineKeyboardButton("🔎 Browse catalogue", callback_data="choose_exercise_from_catalogue"))
     if comes_from == "start_menu":
         # user selected to start a workout that doesn't have any exercises
@@ -37,7 +37,7 @@ def add_exercise_markup(comes_from=None):
 
 def add_another_exercise_markup():
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("➕ Add custom exercise", callback_data="add_exercise"))
+    markup.add(InlineKeyboardButton("✍️ Add custom exercise", callback_data="add_exercise"))
     markup.add(InlineKeyboardButton("🔎 Browse catalogue", callback_data="choose_exercise_from_catalogue"))
     markup.add(InlineKeyboardButton("💪 Start workout", callback_data="exercise_menu:choose_workouts"))
     markup.add(InlineKeyboardButton("Go to main menu", callback_data="start_menu"))
@@ -147,4 +147,13 @@ def exercise_selector_markup(values, list_view=False):
         ]
         markup.add(*inline_values)
     markup.add(InlineKeyboardButton("↩️ Go back", callback_data="choose_exercise_from_catalogue:go_back"))
+    return markup
+
+
+def add_catalogue_exercise_markup():
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton("✅ Add", callback_data="add_catalogue_exercise"),
+        InlineKeyboardButton("↩️ Go back", callback_data="choose_exercise_from_catalogue:go_back")
+    )
     return markup
