@@ -809,11 +809,8 @@ def choose_exercise_from_catalogue(call, path=None):
 
 def add_exercise_to_database(exercise, workout_index):
     user = get_user_from_database(USER_ID)
-    # exercise_json = json.dumps(exercise)
     workout_node_id = list(user.get('saved_workouts'))[workout_index]
     DB.reference(f"/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises/").push(exercise)
-    # res = requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises.json", exercise_json)
-    # print(f"add_exercise_to_database request returned {res.status_code}")
 
     exercise_added()
 
@@ -1083,12 +1080,11 @@ def handle_user_feedback(message=None):
         WAITING_FOR_USER_FEEDBACK = True
     else:
         # received message. post it to feedback node in firebase
-        feedback_object = json.dumps({
+        feedback_object = {
             'user_id': message.from_user.id,
             'feedback_text': message.text
-        })
-        res = requests.post(f"{DB_ROOT}/feedback.json", feedback_object)
-        print(res.status_code, res.text)
+        }
+        DB.reference("/feedback/").push(feedback_object)
 
         send_message("Thanks a lot for your feedback! 😊")
         WAITING_FOR_INPUT = False
