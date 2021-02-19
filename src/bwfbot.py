@@ -1018,6 +1018,7 @@ def show_workout_details(call, workout_id):
 
 
 def stringify_workout(workout):
+    workout = workout.get(list(workout.keys())[0])
     result_string = f"*{prepare_for_markdown_v2(workout.get('title').title())}*\n"
     result_string += f"_Duration: \\~ {workout.get('duration')} minutes_\n\n"
     if workout.get('exercises'):
