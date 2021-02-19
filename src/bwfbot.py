@@ -1,6 +1,7 @@
 import yaml
 import json
 import time
+import telebot
 
 import firebase_admin
 from firebase_admin import auth as AUTH
@@ -127,7 +128,7 @@ def handle_callback_query(call):
         get_workout_title_from_input(call)
 
     elif call.data == "add_exercise":
-        add_exercise(call=call)
+        add_custom_exercise(call=call)
 
     elif call.data == "add_catalogue_exercise":
         add_catalogue_exercise(call, CATALOGUE_EXERCISE)
@@ -153,6 +154,9 @@ def handle_callback_query(call):
     elif call.data == "choose_exercise_from_catalogue":
         choose_exercise_from_catalogue(call)
 
+    elif call.data == "show_add_exercise_options":
+        add_exercise_options(call)
+
     elif call.data.startswith("choose_exercise_from_catalogue:"):
         call.data = call.data.replace("choose_exercise_from_catalogue:", "")
         if call.data == "go_back":
@@ -160,10 +164,7 @@ def handle_callback_query(call):
                 EXERCISE_PATH = EXERCISE_PATH[:-1]
             else:
                 # user already was in root level (movement groups) when they clicked go back
-                send_edited_message(
-                    "How would you like to add a new exercise?",
-                    call.message.id,
-                    reply_markup=add_exercise_markup())
+                add_exercise_options(call)
                 return
         else:
             EXERCISE_PATH.append(call.data)
@@ -327,11 +328,11 @@ def proceed_to_next(message):
 
     if WAITING_FOR_EXERCISE_VIDEO_LINK:
         # user skipped the video link entry
-        add_exercise(message=message, message_type="EXERCISE_VIDEO_LINK", skip_setting=True)
+        add_custom_exercise(message=message, message_type="EXERCISE_VIDEO_LINK", skip_setting=True)
 
     elif WAITING_FOR_MUSCLES_WORKED:
         # user skipped the muscles worked entry
-        add_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED", skip_setting=True)
+        add_custom_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED", skip_setting=True)
 
     elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX != len(WORKOUT.get('exercises')) - 1:
         # display the next exercise in the workout to the user
@@ -476,11 +477,11 @@ def handle_user_input(message):
             get_workout_title_from_input(message=message)
         # create exercise
         elif WAITING_FOR_EXERCISE_NAME:
-            add_exercise(message=message, message_type="EXERCISE_NAME")
+            add_custom_exercise(message=message, message_type="EXERCISE_NAME")
         elif WAITING_FOR_EXERCISE_VIDEO_LINK:
-            add_exercise(message=message, message_type="EXERCISE_VIDEO_LINK")
+            add_custom_exercise(message=message, message_type="EXERCISE_VIDEO_LINK")
         elif WAITING_FOR_MUSCLES_WORKED:
-            add_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED")
+            add_custom_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED")
         # add reps to exercise
         elif WAITING_FOR_REP_COUNT:
             if message.text.isnumeric():
@@ -687,10 +688,10 @@ def set_workout(message):
     add_workout_to_database(new_workout)
 
     message_text = \
-        f"New workout\n\n{workout_title} has been created! " \
-        f"Now let's add some exercises.\n\n" \
-        f"(Note: the order in which you add exercises will be the order in " \
-        f"which I'll display them during a workout.)"
+        f"*New Workout*\n\n*{prepare_for_markdown_v2(workout_title)}* has been created\\! " \
+        f"Now let's add some exercises\\.\n\n" \
+        f"*Note*: the order in which you add exercises will be the order in " \
+        f"which I'll display them during a workout\\."
     send_message(message_text.strip(), reply_markup=add_exercise_markup())
 
 
@@ -698,7 +699,21 @@ def add_workout_to_database(workout):
     DB.reference(f"/users/{USER_NODE_ID}/saved_workouts").push(workout)
 
 
-def add_exercise(call=None, message=None, message_type="", skip_setting=False):
+def add_exercise_options(call):
+    global WAITING_FOR_INPUT, WAITING_FOR_EXERCISE_NAME
+
+    # in case the user clicked the back button after "add custom exercise", disable input flags
+    WAITING_FOR_INPUT = False
+    WAITING_FOR_EXERCISE_NAME = False
+
+    send_edited_message(
+        "How would you like to add a new exercise?",
+        call.message.id,
+        reply_markup=add_exercise_markup()
+    )
+
+
+def add_custom_exercise(call=None, message=None, message_type="", skip_setting=False):
     """
     in a similar vein to get_workout_title(), this function gets called multiple times in order to store user input
     :param call
@@ -722,9 +737,11 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
 
     if not message and call:
         message_text = "Please give the exercise a name."
-        send_edited_message(message_text, call.message.id)
+        send_edited_message(message_text, call.message.id, reply_markup=add_custom_exercise_go_back_markup())
         WAITING_FOR_EXERCISE_NAME = True
     else:
+        remove_inline_replies()  # remove the "go back" option, as it is clear the user wants to continue
+
         if message_type == "EXERCISE_NAME":
             CUSTOM_EXERCISE = dict()
             CUSTOM_EXERCISE["id"] = str(uuid4())

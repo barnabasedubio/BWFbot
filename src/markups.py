@@ -1,4 +1,3 @@
-import telebot
 from telebot.types import \
     KeyboardButton, \
     InlineKeyboardMarkup, \
@@ -156,4 +155,10 @@ def add_catalogue_exercise_markup():
         InlineKeyboardButton("✅ Add", callback_data="add_catalogue_exercise"),
         InlineKeyboardButton("↩️ Go back", callback_data="choose_exercise_from_catalogue:go_back")
     )
+    return markup
+
+
+def add_custom_exercise_go_back_markup():
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("↩️ Go back", callback_data="show_add_exercise_options"))
     return markup
