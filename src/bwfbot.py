@@ -506,7 +506,6 @@ def get_user_from_database(user_id):
         user_data = dict(user_data)
         USER_NODE_ID = list(user_data.keys())[0]
         user_data = user_data.get(USER_NODE_ID)
-        print(f"get_user_from_database returned user: {user_data.get('first_name')}")
         return user_data
 
     except firebase_admin.auth.UserNotFoundError:
@@ -526,9 +525,7 @@ def add_user_to_database(user_id, first_name, last_name, username):
         "id": user_id,
         "username": username,
         "first_name": first_name,
-        "last_name": last_name,
-        "saved_workouts": {},
-        "completed_workouts": {}
+        "last_name": last_name
     })
 
     print(f"add user to db returned node {user_node.key}")
@@ -678,8 +675,7 @@ def set_workout(message):
         "created_by": message.from_user.id,
         "duration": 0,
         "running": False,
-        "saves": 0,
-        "exercises": []
+        "saves": 0
     }
 
     # append new workout to user's list of saved workouts
@@ -813,11 +809,11 @@ def choose_exercise_from_catalogue(call, path=None):
 
 def add_exercise_to_database(exercise, workout_index):
     user = get_user_from_database(USER_ID)
-    exercise_json = json.dumps(exercise)
+    # exercise_json = json.dumps(exercise)
     workout_node_id = list(user.get('saved_workouts'))[workout_index]
-    res = requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises.json",
-                        exercise_json)
-    print(f"add_exercise_to_database request returned {res.status_code}")
+    DB.reference(f"/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises/").push(exercise)
+    # res = requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises.json", exercise_json)
+    # print(f"add_exercise_to_database request returned {res.status_code}")
 
     exercise_added()
 
