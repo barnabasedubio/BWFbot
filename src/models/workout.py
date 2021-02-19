@@ -20,4 +20,3 @@ class Workout:
 		self.running = False
 		self.saves = 0
 		self.exercises = []
-		self.running = False

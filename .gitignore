@@ -3,3 +3,4 @@ local
 __pycache__
 .idea
 config.yml
+firebase_service_account_key_SECRET.json

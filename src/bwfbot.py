@@ -1,10 +1,12 @@
 import requests
 import yaml
 import json
-import jsonpickle
 import time
 
-from models.workout import Workout
+import firebase_admin
+import firebase_admin.auth
+from firebase_admin import db as DB
+
 from markups import *
 
 from uuid import uuid4
@@ -14,7 +16,11 @@ with open("../config.yml", "r") as fp:
     CONFIG = yaml.load(fp, yaml.FullLoader)
 
 TOKEN = CONFIG.get("telegram").get("token")
-DB_ROOT = CONFIG.get("firebase").get("reference")
+DB_ROOT = CONFIG.get("firebase").get("reference")  # should not be
+
+CRED = firebase_admin.credentials.Certificate("../firebase_service_account_key_SECRET.json")
+firebase_admin.initialize_app(CRED, {"databaseURL": DB_ROOT})
+
 
 BOT = telebot.TeleBot(TOKEN)
 USER_ID = None
@@ -156,7 +162,7 @@ def handle_callback_query(call):
         choose_exercise_from_catalogue(call, EXERCISE_PATH)
 
     elif call.data.startswith("START_WORKOUT:"):
-        user = get_user_from_database(USER_ID)[0]
+        user = get_user_from_database(USER_ID)
         workout_id = call.data.replace("START_WORKOUT:", "")
         temp_workout = {}
         counter = 0
@@ -188,7 +194,7 @@ def handle_callback_query(call):
         delete_workout(call=call, workout_id=workout_id)
 
     elif call.data.startswith("CONFIRM_DELETE_WORKOUT:"):
-        user = get_user_from_database(USER_ID)[0]
+        user = get_user_from_database(USER_ID)
         workout_id = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
         workout = get_saved_workout_from_database(workout_id)
         workout_title = workout.get('title')
@@ -248,18 +254,19 @@ def initialize(message):
     reset_state()
 
     CHAT_ID = message.chat.id
-    USER_ID = message.from_user.id
+    USER_ID = str(message.from_user.id)
 
-    is_new_user = False
-    user, USER_NODE_ID = get_user_from_database(USER_ID)
+    # user, USER_NODE_ID = get_user_from_database(USER_ID)
+    user = get_user_from_database(USER_ID)
     if not user:
-        is_new_user = True
-        user, USER_NODE_ID = add_user_to_database(
+        # user, USER_NODE_ID = add_user_to_database(
+        user = add_user_to_database(
             USER_ID,
             message.from_user.first_name,
             message.from_user.last_name,
             message.from_user.username)
-    show_start_options(is_new_user, username=user.get('first_name'))
+
+    show_start_options(username=user.get('first_name'))
 
 
 @BOT.message_handler(commands=["begin"])
@@ -413,7 +420,7 @@ def handle_delete_workout(message):
 
     reset_state()
 
-    user = get_user_from_database(USER_ID)[0]
+    user = get_user_from_database(USER_ID)
 
     if user.get('saved_workouts'):
         message_text = \
@@ -488,53 +495,55 @@ def handle_user_input(message):
 
 
 def get_user_from_database(user_id):
-    node_id = USER_NODE_ID
-    user = None
-    if node_id:
-        res = requests.get(f"{DB_ROOT}/users/{USER_NODE_ID}.json")
-        return res.json(), node_id
-    else:
-        res = requests.get(f"{DB_ROOT}/users.json")
-        if res.ok and res.text != "null":
-            users = res.json()
-            for uid in users:  # uid is the identifier firebase applies to every new node
-                user_object = users[uid]
-                if user_object["id"] == user_id:
-                    user = user_object
-                    node_id = uid
-                    break
+    global USER_NODE_ID
 
-    if user:
-        if "saved_workouts" not in user:
-            user["saved_workouts"] = {}
-        if "created_workouts" not in user:
-            user["created_workouts"] = {}
+    try:
+        # check if user exists
+        user = firebase_admin.auth.get_user(user_id)
 
-    return user, node_id
+        # get database data for user
+        user_data = DB.reference("/users").order_by_child("id").equal_to(user.uid).get()
+        user_data = dict(user_data)
+        USER_NODE_ID = list(user_data.keys())[0]
+        user_data = user_data.get(USER_NODE_ID)
+        print(f"get_user_from_database returned user: {user_data.get('first_name')}")
+        return user_data
+
+    except firebase_admin.auth.UserNotFoundError:
+        return None
 
 
 def add_user_to_database(user_id, first_name, last_name, username):
-    global DB_ROOT
-    new_user = {
+
+    user = firebase_admin.auth.create_user(
+        uid=str(user_id),
+        display_name=first_name
+    )
+    print(f"add_user_to_database successfully added user: {user.display_name}")
+
+    # create user node in database
+    user_node = DB.reference("/users").push({
         "id": user_id,
+        "username": username,
         "first_name": first_name,
         "last_name": last_name,
-        "username": username
-    }
-    new_user_json = json.dumps(new_user)
-    res = requests.post(f"{DB_ROOT}/users.json", new_user_json)
-    print(res.status_code, res.text)
-    return get_user_from_database(user_id)
+        "saved_workouts": {},
+        "completed_workouts": {}
+    })
+
+    print(f"add user to db returned node {user_node.key}")
+
+    return get_user_from_database(user.uid)
 
 
 def get_saved_workout_from_database(workout_id):
-    user = get_user_from_database(USER_ID)[0]
+    user = get_user_from_database(USER_ID)
     for node_id in user.get('saved_workouts'):
         if user.get('saved_workouts').get(node_id).get('id') == workout_id:
             return user.get('saved_workouts').get(node_id)
 
 
-def show_start_options(is_new_user=False, call=None, username="username"):
+def show_start_options(call=None, username="username"):
     if call:
         message_text = \
             "What can I help you with?\n\n" \
@@ -542,7 +551,7 @@ def show_start_options(is_new_user=False, call=None, username="username"):
         send_edited_message(message_text, call.message.id, reply_markup=start_options_markup())
     else:
         message_text = f'''
-                {"Welcome" if is_new_user else "Welcome back"}, {username}. What would you like to do today?
+                Hey, {username}! What would you like to do today?
                 \nType '/' to see all commands you can give me.'''
 
         send_message(message_text.strip(), reply_markup=start_options_markup())
@@ -588,7 +597,7 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 
 
 def choose_workout(call=None, comes_from=None):
-    user = get_user_from_database(USER_ID)[0]
+    user = get_user_from_database(USER_ID)
 
     if user.get('saved_workouts'):
         message_text = "Which workout routine would you like to start?"
@@ -662,7 +671,16 @@ def set_workout(message):
     """
 
     workout_title = message.text
-    new_workout = Workout(workout_title, message.from_user.id)
+    # new_workout = Workout(workout_title, message.from_user.id)
+    new_workout = {
+        "id": str(uuid4()),
+        "title": workout_title,
+        "created_by": message.from_user.id,
+        "duration": 0,
+        "running": False,
+        "saves": 0,
+        "exercises": []
+    }
 
     # append new workout to user's list of saved workouts
     add_workout_to_database(new_workout)
@@ -676,8 +694,7 @@ def set_workout(message):
 
 
 def add_workout_to_database(workout):
-    workout_json = jsonpickle.encode(workout, unpicklable=False)
-    requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json", workout_json)
+    DB.reference(f"/users/{USER_NODE_ID}/saved_workouts").push(workout)
 
 
 def add_exercise(call=None, message=None, message_type="", skip_setting=False):
@@ -795,7 +812,7 @@ def choose_exercise_from_catalogue(call, path=None):
 
 
 def add_exercise_to_database(exercise, workout_index):
-    user = get_user_from_database(USER_ID)[0]
+    user = get_user_from_database(USER_ID)
     exercise_json = json.dumps(exercise)
     workout_node_id = list(user.get('saved_workouts'))[workout_index]
     res = requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises.json",
@@ -810,7 +827,7 @@ def exercise_added(call=None):
         WORKOUT_INDEX, \
         EXERCISE
 
-    user = get_user_from_database(USER_ID)[0]
+    user = get_user_from_database(USER_ID)
 
     workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
     workout_node_id = list(user.get('saved_workouts'))[workout_index]
@@ -983,7 +1000,7 @@ def delete_workout(call, workout_id):
 
 
 def handle_view_workout(call=None):
-    user = get_user_from_database(USER_ID)[0]
+    user = get_user_from_database(USER_ID)
 
     if user.get('saved_workouts'):
         if call:
