@@ -130,7 +130,7 @@ def number_pad_markup(show_done=False):
     # * operator: spread the entries
     number_pad.add(*[str(x) for x in range(4, 16)])
     number_pad.add(
-        KeyboardButton("/done" if show_done else "/next")
+        KeyboardButton("/finish" if show_done else "/next")
     )
     return number_pad
 

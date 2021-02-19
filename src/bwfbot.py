@@ -1,4 +1,3 @@
-import requests
 import yaml
 import json
 import time
@@ -194,27 +193,19 @@ def handle_callback_query(call):
         delete_workout(call=call, workout_id=workout_id)
 
     elif call.data.startswith("CONFIRM_DELETE_WORKOUT:"):
-        user = get_user_from_database(USER_ID)
         workout_id = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
         workout = get_saved_workout_from_database(workout_id)
-        workout_title = workout.get('title')
-        if len(user.get('saved_workouts')) == 1:
-            requests.delete(f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json")
-        else:
-            user['saved_workouts'] = {
-                key: value
-                for (key, value) in user.get('saved_workouts').items()
-                if user.get('saved_workouts').get(key).get('id') != workout_id}
+        workout_key = list(workout.keys())[0]
+        workout_title = workout.get(workout_key).get("title")
 
-            requests.put(
-                f"{DB_ROOT}/users/{USER_NODE_ID}/saved_workouts.json",
-                json.dumps(user.get('saved_workouts')))
-
+        delete_saved_workout_from_database(USER_NODE_ID, workout_key)
         send_edited_message(f"Done! {workout_title} is gone from your saved workouts.", call.message.id)
 
     elif call.data.startswith("ABORT_DELETE_WORKOUT:"):
         workout_id = call.data.replace("ABORT_DELETE_WORKOUT:", "")
-        workout_title = get_saved_workout_from_database(workout_id)['title']
+        workout = get_saved_workout_from_database(workout_id)
+        workout_key = list(workout.keys())[0]
+        workout_title = workout.get(workout_key).get("title")
         send_edited_message(f"Gotcha! Will not delete {workout_title}.", call.message.id)
 
     elif call.data.startswith("VIEW_WORKOUT:"):
@@ -335,13 +326,13 @@ def proceed_to_next(message):
 
     elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX != len(WORKOUT.get('exercises')) - 1:
         # display the next exercise in the workout to the user
-        # if the user is on their last exercise, this logic is handled by the /done handler instead
+        # if the user is on their last exercise, this logic is handled by the /finish handler instead
         CURRENT_EXERCISE_INDEX += 1
         do_workout()
 
 
-# handle /done command
-@BOT.message_handler(commands=["done"])
+# handle /finish command
+@BOT.message_handler(commands=["finish"])
 def finish(message):
     global \
         MESSAGES, \
@@ -355,12 +346,10 @@ def finish(message):
     if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.get('exercises')) - 1:
         # user is done with their workout. End workout and add it to their completed workouts
         WORKOUT['running'] = False
-        res = requests.post(f"{DB_ROOT}/users/{USER_NODE_ID}/completed_workouts.json", json.dumps(WORKOUT))
-        print(res.status_code, res.text)
 
+        add_completed_workout_to_database(USER_NODE_ID, WORKOUT)
         # reset exercise index
         CURRENT_EXERCISE_INDEX = 0  # reset
-
         # deactivate user input handling
         WAITING_FOR_REP_COUNT = False
         WAITING_FOR_INPUT = False
@@ -534,10 +523,17 @@ def add_user_to_database(user_id, first_name, last_name, username):
 
 
 def get_saved_workout_from_database(workout_id):
-    user = get_user_from_database(USER_ID)
-    for node_id in user.get('saved_workouts'):
-        if user.get('saved_workouts').get(node_id).get('id') == workout_id:
-            return user.get('saved_workouts').get(node_id)
+    workout = DB.reference(f"/users/{USER_NODE_ID}/saved_workouts/").order_by_child("id").equal_to(workout_id).get()
+    workout = dict(workout)
+    return workout
+
+
+def delete_saved_workout_from_database(user_node, workout_key):
+    DB.reference(f"/users/{user_node}/saved_workouts/{workout_key}").delete()
+
+
+def add_completed_workout_to_database(user_node_id, workout):
+    DB.reference(f"/users/{user_node_id}/completed_workouts/").push(workout)
 
 
 def show_start_options(call=None, username="username"):
@@ -721,6 +717,7 @@ def add_exercise(call=None, message=None, message_type="", skip_setting=False):
     else:
         if message_type == "EXERCISE_NAME":
             EXERCISE = dict()
+            EXERCISE["id"] = str(uuid4())
             EXERCISE['name'] = message.text
             WAITING_FOR_EXERCISE_NAME = False
             # retrieved exercise name. Ask for youtube link
@@ -858,6 +855,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     if not WORKOUT:
         # only happens once (when the workout gets started initially)
         WORKOUT = get_saved_workout_from_database(workout_id)
+        WORKOUT = WORKOUT.get(list(WORKOUT.keys())[0])
         # give the new workout a new id
         WORKOUT['id'] = str(uuid4())
         WORKOUT['template_id'] = workout_id
@@ -876,7 +874,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
             message_text = \
                 f"Almost done\\!\n" \
                 f"{stringify_exercise(current_exercise)}\n" \
-                f"Send me the rep count for each set\\. Once you're done, click /done\\."
+                f"Send me the rep count for each set\\. Once you're done, click /finish\\."
 
         else:
             # the user is beginning the exercise. Show the exercise info
@@ -986,7 +984,7 @@ def workout_completed():
 
 
 def delete_workout(call, workout_id):
-    workout_title = get_saved_workout_from_database(workout_id)['title']
+    workout_title = list(get_saved_workout_from_database(workout_id).values())[0].get('title')
     send_edited_message(
         f"Are you sure you want to delete {workout_title}?",
         call.message.id, reply_markup=delete_workout_confirmation_markup(workout_id))
