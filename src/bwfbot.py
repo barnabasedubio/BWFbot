@@ -692,7 +692,7 @@ def set_workout(message):
         f"Now let's add some exercises\\.\n\n" \
         f"*Note*: the order in which you add exercises will be the order in " \
         f"which I'll display them during a workout\\."
-    send_message(message_text.strip(), reply_markup=add_exercise_markup())
+    send_message(message_text.strip(), reply_markup=add_exercise_markup(), parse_mode="MarkdownV2")
 
 
 def add_workout_to_database(workout):
