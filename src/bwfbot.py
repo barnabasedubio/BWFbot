@@ -728,7 +728,6 @@ def set_workout(message):
         "title": workout_title,
         "created_by": message.from_user.id,
         "created_at": int(time.time()),
-        "duration": 0,
         "running": False,
         "saves": 0
     }
@@ -974,6 +973,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
         # give the new workout a new id
         WORKOUT['id'] = str(uuid4())
         WORKOUT['template_id'] = workout_id
+        WORKOUT['created_at'] = None  # this is only needed for the template
         WORKOUT['running'] = True
         WORKOUT['started_at'] = int(time.time())
 
@@ -1137,8 +1137,7 @@ def show_workout_details(call, workout_id):
 
 def stringify_workout(workout):
     workout = workout.get(list(workout.keys())[0])
-    result_string = f"*{prepare_for_markdown_v2(workout.get('title').title())}*\n"
-    result_string += f"_Duration: \\~ {int(workout.get('duration') / 60)} minutes_\n\n"
+    result_string = f"*{prepare_for_markdown_v2(workout.get('title').title())}*\n\n"
     if workout.get('exercises'):
         result_string += "_Exercises:_\n\n"
         for node_id in workout.get('exercises'):
