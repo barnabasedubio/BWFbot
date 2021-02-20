@@ -448,6 +448,18 @@ def user_feedback(message):
     handle_user_feedback()
 
 
+@BOT.message_handler(commands=["stats", "publish"])
+def feature_in_progress(message):
+    global MESSAGES
+
+    MESSAGES.append(message)
+    remove_inline_replies()
+
+    send_message(
+        "This feature is currently still getting developed. "
+        "In the meantime, please send me some /feedback as to what you would like to see!")
+
+
 # only if bot is expecting user input
 # needs to be the very last handler!!
 @BOT.message_handler(func=lambda message: message.text)
