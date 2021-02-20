@@ -559,6 +559,7 @@ def add_completed_workout_to_database(user_node_id, workout):
 
 
 def show_start_options(call=None, username="username"):
+    reset_state()
     if call:
         message_text = \
             "What can I help you with?\n\n" \
@@ -662,17 +663,25 @@ def get_workout_title_from_input(call=None, message=None):
         WAITING_FOR_WORKOUT_TITLE
 
     if not message:
-        message_text = '''New workout\n\nWhat would you like to name your workout?'''
+        message_text = '''*New workout*\n\nWhat would you like to name your workout?'''
         if call:
-            send_edited_message(message_text, call.message.id)
+            send_edited_message(
+                message_text,
+                call.message.id,
+                reply_markup=create_workout_go_back_markup(),
+                parse_mode="MarkdownV2")
         else:
-            send_message(message_text)
+            send_message(
+                message_text, 
+                reply_markup=create_workout_go_back_markup(),
+                parse_mode="MarkdownV2")
 
         WAITING_FOR_INPUT = True
         WAITING_FOR_WORKOUT_TITLE = True
 
     else:
         # received input, set global flags back to false
+        remove_inline_replies()
         WAITING_FOR_INPUT = False
         WAITING_FOR_WORKOUT_TITLE = False
         set_workout(message)
@@ -1144,7 +1153,7 @@ def handle_user_feedback(message=None):
         send_message(
             "How are you enjoying my service? "
             "Is there anything you would like to me to include, or improve upon?"
-            "\nI am constantly trying to get better, so please pour your heart out!"
+            "\n\nI am constantly trying to get better, so please pour your heart out!"
         )
         WAITING_FOR_INPUT = True
         WAITING_FOR_USER_FEEDBACK = True

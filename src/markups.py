@@ -43,6 +43,12 @@ def add_another_exercise_markup():
     return markup
 
 
+def create_workout_go_back_markup():
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("↩️ Go back", callback_data="start_menu"))
+    return markup
+
+
 def create_workout_answer_markup():
     markup = InlineKeyboardMarkup()
     markup.add(
