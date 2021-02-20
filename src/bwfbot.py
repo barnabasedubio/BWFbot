@@ -131,6 +131,7 @@ def handle_callback_query(call):
         add_custom_exercise(call=call)
 
     elif call.data == "add_catalogue_exercise":
+        CATALOGUE_EXERCISE['id'] = str(uuid4())
         add_catalogue_exercise(call, CATALOGUE_EXERCISE)
 
     elif call.data == "explore_community":
@@ -171,7 +172,7 @@ def handle_callback_query(call):
         choose_exercise_from_catalogue(call, EXERCISE_PATH)
 
     elif call.data.startswith("START_WORKOUT:"):
-        user = get_user_from_database(USER_ID)
+        user = get_user_from_database(USER_ID)  # TODO: no DB call needed here if you use global var
         workout_id = call.data.replace("START_WORKOUT:", "")
         temp_workout = {}
         counter = 0
@@ -257,10 +258,8 @@ def initialize(message):
     CHAT_ID = message.chat.id
     USER_ID = str(message.from_user.id)
 
-    # user, USER_NODE_ID = get_user_from_database(USER_ID)
-    user = get_user_from_database(USER_ID)
+    user = get_user_from_database(USER_ID)  # TODO: no DB call needed here if you use global var
     if not user:
-        # user, USER_NODE_ID = add_user_to_database(
         user = add_user_to_database(
             USER_ID,
             message.from_user.first_name,
@@ -355,6 +354,7 @@ def finish(message):
 
     if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.get('exercises')) - 1:
         # user is done with their workout. End workout and add it to their completed workouts
+        WORKOUT['duration'] = int(time.time()) - WORKOUT.get('started_at')
         WORKOUT['running'] = False
 
         add_completed_workout_to_database(USER_NODE_ID, WORKOUT)
@@ -419,7 +419,7 @@ def handle_delete_workout(message):
 
     reset_state()
 
-    user = get_user_from_database(USER_ID)
+    user = get_user_from_database(USER_ID)  # TODO: no DB call needed here if you use global var
 
     if user.get('saved_workouts'):
         message_text = \
@@ -433,27 +433,50 @@ def handle_delete_workout(message):
 
 @BOT.message_handler(commands=["view"])
 def view_workout(message):
-    global MESSAGES
+    global MESSAGES, WORKOUT, RESET_STATE
 
     MESSAGES.append(message)
     remove_inline_replies()
+
+    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+        confirm_reset_state()
+        return
+
+    # reset application state for every new session
+    reset_state()
+
     handle_view_workout()
 
 
 @BOT.message_handler(commands=["feedback"])
 def user_feedback(message):
-    global MESSAGES
+    global MESSAGES, WORKOUT, RESET_STATE
 
     MESSAGES.append(message)
+
+    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+        confirm_reset_state()
+        return
+
+    # reset application state for every new session
+    reset_state()
+
     handle_user_feedback()
 
 
 @BOT.message_handler(commands=["stats", "publish"])
 def feature_in_progress(message):
-    global MESSAGES
+    global MESSAGES, WORKOUT, RESET_STATE
 
     MESSAGES.append(message)
     remove_inline_replies()
+
+    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+        confirm_reset_state()
+        return
+
+    # reset application state for every new session
+    reset_state()
 
     send_message(
         "This feature is currently still getting developed. "
@@ -613,10 +636,13 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 
 
 def choose_workout(call=None, comes_from=None):
-    user = get_user_from_database(USER_ID)
+    user = get_user_from_database(USER_ID)  # TODO: no DB call needed here if you use global var
 
     if user.get('saved_workouts'):
-        message_text = "Which workout routine would you like to start?"
+        message_text = \
+            "Which workout routine would you like to start?\n\n" \
+            "*Note*:\nOnce you have started a workout, please complete it before performing and other commands\\.\n\n" \
+            "If you want to see the workout details, click /view\\."
 
         if comes_from == "add_another_exercise":
             reply_markup = list_workouts_markup(user.get('saved_workouts'), comes_from="add_another_exercise")
@@ -627,11 +653,13 @@ def choose_workout(call=None, comes_from=None):
             send_edited_message(
                 message_text,
                 call.message.id,
-                reply_markup=reply_markup)
+                reply_markup=reply_markup,
+                parse_mode="MarkdownV2")
         else:
             send_message(
                 message_text,
-                reply_markup=reply_markup)
+                reply_markup=reply_markup,
+                parse_mode="MarkdownV2")
     else:
         if call:
             message_text = "You don't have any stored workouts. Would you like to create a new one?"
@@ -672,7 +700,7 @@ def get_workout_title_from_input(call=None, message=None):
                 parse_mode="MarkdownV2")
         else:
             send_message(
-                message_text, 
+                message_text,
                 reply_markup=create_workout_go_back_markup(),
                 parse_mode="MarkdownV2")
 
@@ -695,11 +723,11 @@ def set_workout(message):
     """
 
     workout_title = message.text
-    # new_workout = Workout(workout_title, message.from_user.id)
     new_workout = {
         "id": str(uuid4()),
         "title": workout_title,
         "created_by": message.from_user.id,
+        "created_at": int(time.time()),
         "duration": 0,
         "running": False,
         "saves": 0
@@ -883,7 +911,7 @@ def add_catalogue_exercise(call, catalogue_exercise):
 
 
 def add_exercise_to_database(exercise, workout_index):
-    user = get_user_from_database(USER_ID)
+    user = get_user_from_database(USER_ID)  # TODO: no DB call needed here if you use global var
     workout_node_id = list(user.get('saved_workouts'))[workout_index]
     DB.reference(f"/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises/").push(exercise)
 
@@ -895,7 +923,7 @@ def exercise_added(call=None):
 
     remove_inline_replies()
 
-    user = get_user_from_database(USER_ID)
+    user = get_user_from_database(USER_ID)  # TODO: no DB call needed here if you use global var
 
     workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
     workout_node_id = list(user.get('saved_workouts'))[workout_index]
@@ -905,16 +933,23 @@ def exercise_added(call=None):
         f"{stringify_exercise(MOST_RECENTLY_ADDED_EXERCISE)}\n"
 
     confirmation_text = \
-        f"Added {prepare_for_markdown_v2(MOST_RECENTLY_ADDED_EXERCISE.get('name'))} to " \
-        f"{user.get('saved_workouts').get(workout_node_id).get('title')}\\!\n" \
+        f"Added *{prepare_for_markdown_v2(MOST_RECENTLY_ADDED_EXERCISE.get('name'))}* to " \
+        f"*{user.get('saved_workouts').get(workout_node_id).get('title')}*\\!\n" \
         f"Would you like to add another exercise?"
 
     message_text = exercise_summary_text + "\n" + confirmation_text
 
     if call:
-        send_edited_message(message_text, call.message.id, parse_mode="MarkdownV2", reply_markup=add_another_exercise_markup())
+        send_edited_message(
+            message_text,
+            call.message.id,
+            parse_mode="MarkdownV2",
+            reply_markup=add_another_exercise_markup())
     else:
-        send_message(message_text, parse_mode="MarkdownV2", reply_markup=add_another_exercise_markup())
+        send_message(
+            message_text,
+            parse_mode="MarkdownV2",
+            reply_markup=add_another_exercise_markup())
 
 
 def do_workout(new_rep_entry=False, message=None, workout_id=None):
@@ -940,6 +975,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
         WORKOUT['id'] = str(uuid4())
         WORKOUT['template_id'] = workout_id
         WORKOUT['running'] = True
+        WORKOUT['started_at'] = int(time.time())
 
     # create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
     exercise_node_ids = list(WORKOUT.get('exercises'))
@@ -959,6 +995,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
         else:
             # the user is beginning the exercise. Show the exercise info
             message_text = \
+                f"Next up:\n\n" \
                 f"{stringify_exercise(current_exercise)}\n" \
                 f"Send me the rep count for each set\\. Once you're done, click /next\\."
 
@@ -1045,7 +1082,8 @@ def workout_completed():
 
     # send workout report
     # the report consists of: total rep amount | average reps per set for ever exercise.
-    report = "📊 *Workout Report*\n\n"
+    report = "📝 *Workout Report*\n\n"
+    report += f"_Duration_: \\~ *{round(WORKOUT.get('duration') / 60)}* minutes\n\n"
     for exercise_node_id in WORKOUT.get('exercises'):
         exercise = WORKOUT.get('exercises').get(exercise_node_id)
         if exercise.get('reps'):
@@ -1071,7 +1109,7 @@ def delete_workout(call, workout_id):
 
 
 def handle_view_workout(call=None):
-    user = get_user_from_database(USER_ID)
+    user = get_user_from_database(USER_ID)  # TODO: no DB call needed here if you use global var
 
     if user.get('saved_workouts'):
         if call:
@@ -1100,7 +1138,7 @@ def show_workout_details(call, workout_id):
 def stringify_workout(workout):
     workout = workout.get(list(workout.keys())[0])
     result_string = f"*{prepare_for_markdown_v2(workout.get('title').title())}*\n"
-    result_string += f"_Duration: \\~ {workout.get('duration')} minutes_\n\n"
+    result_string += f"_Duration: \\~ {int(workout.get('duration') / 60)} minutes_\n\n"
     if workout.get('exercises'):
         result_string += "_Exercises:_\n\n"
         for node_id in workout.get('exercises'):
