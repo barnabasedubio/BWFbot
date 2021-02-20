@@ -30,7 +30,7 @@ def add_exercise_markup(comes_from=None):
         # user selected to start a workout that doesn't have any exercises
         markup.add(InlineKeyboardButton("↩️ Go back", callback_data="choose_workouts"))
     else:
-        markup.add(InlineKeyboardButton("❌ Cancel", callback_data="cancel_add_exercise"))
+        markup.add(InlineKeyboardButton("❌ Cancel", callback_data="start_menu"))
     return markup
 
 
