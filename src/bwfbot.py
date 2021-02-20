@@ -115,6 +115,8 @@ def handle_callback_query(call):
         EXERCISE_PATH, \
         CATALOGUE_EXERCISE
 
+    BOT.answer_callback_query(callback_query_id=call.id)  # remove loading spinner
+
     if call.data == "choose_workouts":
         choose_workout(call=call)
 
