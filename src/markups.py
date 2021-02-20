@@ -9,7 +9,7 @@ def start_options_markup():
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("💪 Start one of my workouts", callback_data="choose_workouts"))
     markup.add(InlineKeyboardButton("✳️ Create a new workout", callback_data="create_workout"))
-    markup.add(InlineKeyboardButton("👥 Explore the community", callback_data="explore_community"))
+    markup.add(InlineKeyboardButton("👥 Explore community workouts", callback_data="explore_community"))
     return markup
 
 
