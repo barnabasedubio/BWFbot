@@ -126,7 +126,7 @@ def view_exercise_details_markup():
     return markup
 
 
-def number_pad_markup(show_done=False):
+def number_pad_markup(show_previous=False, show_finish=False):
     # User uses this keyboard to store their reps after each set
     number_pad = ReplyKeyboardMarkup(
         resize_keyboard=False,
@@ -134,9 +134,15 @@ def number_pad_markup(show_done=False):
     )
     # * operator: spread the entries
     number_pad.add(*[str(x) for x in range(4, 16)])
-    number_pad.add(
-        KeyboardButton("/finish" if show_done else "/next")
-    )
+    if show_previous:
+        number_pad.add(
+            KeyboardButton("/previous"),
+            KeyboardButton("/finish" if show_finish else "/next")
+        )
+    else:
+        number_pad.add(
+            KeyboardButton("/finish" if show_finish else "/next")
+        )
     return number_pad
 
 

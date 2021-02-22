@@ -342,6 +342,22 @@ def proceed_to_next(message):
         do_workout()
 
 
+# handle /previous command
+@BOT.message_handler(commands=["previous"])
+def return_to_previous(message):
+    global \
+        MESSAGES, \
+        CURRENT_EXERCISE_INDEX, \
+        WAITING_FOR_REP_COUNT, \
+        WORKOUT
+
+    MESSAGES.append(message)
+
+    if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX > 0:
+        CURRENT_EXERCISE_INDEX -= 1
+        do_workout()
+
+
 # handle /finish command
 @BOT.message_handler(commands=["finish"])
 def finish(message):
@@ -643,8 +659,7 @@ def choose_workout(call=None, comes_from=None):
     if user.get('saved_workouts'):
         message_text = \
             "Which workout routine would you like to start?\n\n" \
-            "*Note*:\nOnce you have started a workout, please complete it before performing and other commands\\.\n\n" \
-            "If you want to see the workout details, click /view\\."
+            "If you want to view the exercises in each workout, click /view\\."
 
         if comes_from == "add_another_exercise":
             reply_markup = list_workouts_markup(user.get('saved_workouts'), comes_from="add_another_exercise")
@@ -985,23 +1000,30 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     current_exercise = WORKOUT.get('exercises').get(current_exercise_node_id)
 
     if not new_rep_entry:
-        show_done = False
+        about_to_finish = False
+        pre_text = "Next up:\n\n"
+        next_command = "/next"
+
         if current_exercise.get('id') == WORKOUT.get('exercises').get(exercise_node_ids[-1]).get('id'):
-            show_done = True
-            # user is performing the last exercise
-            message_text = \
-                f"Almost done\\!\n\n" \
-                f"{stringify_exercise(current_exercise)}\n" \
-                f"Send me the rep count for each set\\. Once you're done, click /finish\\."
+            about_to_finish = True
+            pre_text = "Almost done\\!\n\n"
+            next_command = "/finish"
 
-        else:
-            # the user is beginning the exercise. Show the exercise info
-            message_text = \
-                f"Next up:\n\n" \
-                f"{stringify_exercise(current_exercise)}\n" \
-                f"Send me the rep count for each set\\. Once you're done, click /next\\."
+        # if the current exercise already contains the reps property, this means that the user proceeded to the next
+        # exercise before returning to continue this one. If that happens, give the use a brief overview of already
+        # completed sets in this workout session
+        stats_text = ""
+        if current_exercise.get('reps'):
+            stats_text = f"_Stats for this current session:" \
+                         f"_\n*{', '.join([str(x) for x in current_exercise.get('reps')])}*\n\n"
 
-        send_message(message_text, reply_markup=number_pad_markup(show_done), parse_mode="MarkdownV2")
+        message_text = pre_text + f"{stringify_exercise(current_exercise)}\n" + stats_text + \
+            f"Send me the rep count for each set\\. Once you're done, click {next_command}\\."
+
+        send_message(
+            message_text,
+            reply_markup=number_pad_markup(CURRENT_EXERCISE_INDEX != 0, about_to_finish),
+            parse_mode="MarkdownV2")
 
         # view exercise details (such as the rolling average and other stats)
         if PAST_WORKOUT_DATA:
