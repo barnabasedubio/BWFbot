@@ -3,26 +3,26 @@ import json
 import time
 import telebot
 
-import firebase_admin
-from firebase_admin import auth as AUTH
-from firebase_admin import db as DB
+from firebase_admin import \
+    credentials, \
+    initialize_app
 
 from markups import *
+from database import *
 
 from uuid import uuid4
 
 # configuration
 with open("../config.yml", "r") as fp:
-    CONFIG = yaml.load(fp, yaml.FullLoader)
+    config = yaml.load(fp, yaml.FullLoader)
 
-TOKEN = CONFIG.get("telegram").get("token")
-CRED = firebase_admin.credentials.Certificate("../firebase_service_account_key_SECRET.json")
+cred = credentials.Certificate("../firebase_service_account_key_SECRET.json")
+initialize_app(cred, {"databaseURL": config.get("firebase").get("reference")})
 
-firebase_admin.initialize_app(CRED, {"databaseURL": CONFIG.get("firebase").get("reference")})
-
+TOKEN = config.get("telegram").get("token")
 BOT = telebot.TeleBot(TOKEN)
+
 USER_ID = None
-USER_NODE_ID = None  # firebase's id of the user
 CHAT_ID = None
 MESSAGES = []
 
@@ -207,16 +207,16 @@ def handle_callback_query(call):
 
     elif call.data.startswith("CONFIRM_DELETE_WORKOUT:"):
         workout_id = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
-        workout = get_saved_workout_from_database(workout_id)
+        workout = get_saved_workout_from_database(USER_ID, workout_id)
         workout_key = list(workout.keys())[0]
         workout_title = workout.get(workout_key).get("title")
 
-        delete_saved_workout_from_database(USER_NODE_ID, workout_key)
+        delete_saved_workout_from_database(USER_ID, workout_key)
         send_edited_message(f"Done! {workout_title} is gone from your saved workouts.", call.message.id)
 
     elif call.data.startswith("ABORT_DELETE_WORKOUT:"):
         workout_id = call.data.replace("ABORT_DELETE_WORKOUT:", "")
-        workout = get_saved_workout_from_database(workout_id)
+        workout = get_saved_workout_from_database(USER_ID, workout_id)
         workout_key = list(workout.keys())[0]
         workout_title = workout.get(workout_key).get("title")
         send_edited_message(f"Gotcha! Will not delete {workout_title}.", call.message.id)
@@ -245,7 +245,6 @@ def initialize(message):
     global RESET_STATE
     global CHAT_ID
     global USER_ID
-    global USER_NODE_ID
 
     MESSAGES.append(message)
     remove_inline_replies()
@@ -375,7 +374,7 @@ def finish(message):
         WORKOUT['duration'] = int(time.time()) - WORKOUT.get('started_at')
         WORKOUT['running'] = False
 
-        add_completed_workout_to_database(USER_NODE_ID, WORKOUT)
+        add_completed_workout_to_database(USER_ID, WORKOUT)
         # reset exercise index
         CURRENT_EXERCISE_INDEX = 0  # reset
         # deactivate user input handling
@@ -545,60 +544,6 @@ def handle_user_input(message):
 
 # ----------------- FUNCTIONS ------------------
 
-
-def get_user_from_database(user_id):
-    global USER_NODE_ID
-
-    try:
-        # check if user exists
-        user = AUTH.get_user(user_id)
-
-        # get database data for user
-        user_data = DB.reference("/users").order_by_child("id").equal_to(user.uid).get()
-        user_data = dict(user_data)
-        USER_NODE_ID = list(user_data.keys())[0]
-        user_data = user_data.get(USER_NODE_ID)
-        return user_data
-
-    except AUTH.UserNotFoundError:
-        return None
-
-
-def add_user_to_database(user_id, first_name, last_name, username):
-
-    user = AUTH.create_user(
-        uid=str(user_id),
-        display_name=first_name
-    )
-    print(f"add_user_to_database successfully added user: {user.display_name}")
-
-    # create user node in database
-    user_node = DB.reference("/users").push({
-        "id": user_id,
-        "username": username,
-        "first_name": first_name,
-        "last_name": last_name
-    })
-
-    print(f"add user to db returned node {user_node.key}")
-
-    return get_user_from_database(user.uid)
-
-
-def get_saved_workout_from_database(workout_id):
-    workout = DB.reference(f"/users/{USER_NODE_ID}/saved_workouts/").order_by_child("id").equal_to(workout_id).get()
-    workout = dict(workout)
-    return workout
-
-
-def delete_saved_workout_from_database(user_node, workout_key):
-    DB.reference(f"/users/{user_node}/saved_workouts/{workout_key}").delete()
-
-
-def add_completed_workout_to_database(user_node_id, workout):
-    DB.reference(f"/users/{user_node_id}/completed_workouts/").push(workout)
-
-
 def show_start_options(call=None, username="username"):
     reset_state()
     if call:
@@ -750,7 +695,7 @@ def set_workout(message):
     }
 
     # append new workout to user's list of saved workouts
-    add_workout_to_database(new_workout)
+    add_workout_to_database(USER_ID, new_workout)
 
     message_text = \
         f"*New Workout*\n\n*{prepare_for_markdown_v2(workout_title)}* has been created\\! " \
@@ -758,10 +703,6 @@ def set_workout(message):
         f"*Note*: the order in which you add exercises will be the order in " \
         f"which I'll display them during a workout\\."
     send_message(message_text.strip(), reply_markup=add_exercise_markup(), parse_mode="MarkdownV2")
-
-
-def add_workout_to_database(workout):
-    DB.reference(f"/users/{USER_NODE_ID}/saved_workouts").push(workout)
 
 
 def add_exercise_options(call):
@@ -845,7 +786,7 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             # unless specified (WORKOUT_INDEX not None)
             workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
 
-            add_exercise_to_database(CUSTOM_EXERCISE, workout_index)
+            add_exercise_to_database(USER_ID, CUSTOM_EXERCISE, workout_index)
 
             # the most recently added exercise was this one, so update the global variable
             MOST_RECENTLY_ADDED_EXERCISE = CUSTOM_EXERCISE
@@ -912,10 +853,11 @@ def add_catalogue_exercise(call, catalogue_exercise):
     global \
         WORKOUT_INDEX, \
         MOST_RECENTLY_ADDED_EXERCISE, \
-        EXERCISE_PATH
+        EXERCISE_PATH, \
+        USER_ID
 
     workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
-    add_exercise_to_database(catalogue_exercise, workout_index)
+    add_exercise_to_database(USER_ID, catalogue_exercise, workout_index)
 
     # the most recently added exercise was this one, so update the global variable
     MOST_RECENTLY_ADDED_EXERCISE = catalogue_exercise
@@ -924,12 +866,6 @@ def add_catalogue_exercise(call, catalogue_exercise):
     EXERCISE_PATH = []
 
     exercise_added(call)
-
-
-def add_exercise_to_database(exercise, workout_index):
-    user = get_user_from_database(USER_ID)  # TODO: no DB call needed here if you use global var
-    workout_node_id = list(user.get('saved_workouts'))[workout_index]
-    DB.reference(f"/users/{USER_NODE_ID}/saved_workouts/{workout_node_id}/exercises/").push(exercise)
 
 
 def exercise_added(call=None):
@@ -985,7 +921,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
 
     if not WORKOUT:
         # only happens once (when the workout gets started initially)
-        WORKOUT = get_saved_workout_from_database(workout_id)
+        WORKOUT = get_saved_workout_from_database(USER_ID, workout_id)
         WORKOUT = WORKOUT.get(list(WORKOUT.keys())[0])
         # give the new workout a new id
         WORKOUT['id'] = str(uuid4())
@@ -1126,7 +1062,7 @@ def workout_completed():
 
 
 def delete_workout(call, workout_id):
-    workout_title = list(get_saved_workout_from_database(workout_id).values())[0].get('title')
+    workout_title = list(get_saved_workout_from_database(USER_ID, workout_id).values())[0].get('title')
     send_edited_message(
         f"Are you sure you want to delete {workout_title}?",
         call.message.id, reply_markup=delete_workout_confirmation_markup(workout_id))
@@ -1150,7 +1086,7 @@ def handle_view_workout(call=None):
 
 
 def show_workout_details(call, workout_id):
-    workout = get_saved_workout_from_database(workout_id)
+    workout = get_saved_workout_from_database(USER_ID, workout_id)
 
     send_edited_message(
         stringify_workout(workout),
@@ -1224,7 +1160,7 @@ def handle_user_feedback(message=None):
             'user_id': message.from_user.id,
             'feedback_text': message.text
         }
-        DB.reference("/feedback/").push(feedback_object)
+        add_feedback_to_database(feedback_object)
 
         send_message("Thanks a lot for your feedback! 😊")
         WAITING_FOR_INPUT = False
