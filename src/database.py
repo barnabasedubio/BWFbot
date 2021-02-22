@@ -86,3 +86,11 @@ def add_completed_workout_to_database(user_id, workout):
 
 def add_feedback_to_database(feedback_object):
     DB.reference("/feedback/").push(feedback_object)
+
+
+def main():
+    print("Don't run me!")
+
+
+if __name__ == "__main__":
+    main()

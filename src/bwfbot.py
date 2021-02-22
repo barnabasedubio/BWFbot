@@ -2,6 +2,7 @@ import yaml
 import json
 import time
 import telebot
+import redis
 
 from firebase_admin import \
     credentials, \
@@ -16,8 +17,10 @@ from uuid import uuid4
 with open("../config.yml", "r") as fp:
     config = yaml.load(fp, yaml.FullLoader)
 
-cred = credentials.Certificate("../firebase_service_account_key_SECRET.json")
-initialize_app(cred, {"databaseURL": config.get("firebase").get("reference")})
+CRED = credentials.Certificate("../firebase_service_account_key_SECRET.json")
+initialize_app(CRED, {"databaseURL": config.get("firebase").get("reference")})
+
+CONN = redis.Redis(decode_responses=True)
 
 TOKEN = config.get("telegram").get("token")
 BOT = telebot.TeleBot(TOKEN)
@@ -273,6 +276,8 @@ def initialize(message):
                 message.from_user.username)
 
         show_start_options(username=USER.get('first_name'))
+
+    CONN.set("user", USER)
 
 
 @BOT.message_handler(commands=["begin"])
