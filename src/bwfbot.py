@@ -115,7 +115,8 @@ def handle_callback_query(call):
         EXERCISE_PATH, \
         CATALOGUE_EXERCISE
 
-    BOT.answer_callback_query(callback_query_id=call.id)  # remove loading spinner
+    if not call.data == "add_catalogue_exercise":
+        BOT.answer_callback_query(callback_query_id=call.id)  # remove loading spinner
 
     if call.data == "choose_workouts":
         choose_workout(call=call)
@@ -258,15 +259,20 @@ def initialize(message):
     CHAT_ID = message.chat.id
     user_id = str(message.from_user.id)
 
-    if not bool(USER):
-        # new user
-        USER = add_user_to_database(
-            user_id,
-            message.from_user.first_name,
-            message.from_user.last_name,
-            message.from_user.username)
+    if bool(USER):
+        show_start_options(username=USER.get('first_name'))
 
-    show_start_options(username=USER.get('first_name'))
+    else:
+        USER = get_user_from_database(user_id)
+        if not USER:
+            # new user
+            USER = add_user_to_database(
+                user_id,
+                message.from_user.first_name,
+                message.from_user.last_name,
+                message.from_user.username)
+
+        show_start_options(username=USER.get('first_name'))
 
 
 @BOT.message_handler(commands=["begin"])
@@ -856,9 +862,6 @@ def add_catalogue_exercise(call, catalogue_exercise):
         EXERCISE_PATH, \
         USER
 
-    # TODO: answer callback query here for catalogue exercises that have been added
-    #  (in order to display loading spinner until confirmation message has been sent)
-
     workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
     USER = add_exercise_to_database(USER.get("id"), catalogue_exercise, workout_index)
 
@@ -894,6 +897,10 @@ def exercise_added(call=None):
     message_text = exercise_summary_text + "\n" + confirmation_text
 
     if call:
+        # TODO: answer callback query here for catalogue exercises that have been added
+        #  (in order to display loading spinner until confirmation message has been sent)
+        BOT.answer_callback_query(callback_query_id=call.id)
+
         send_edited_message(
             message_text,
             call.message.id,
