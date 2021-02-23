@@ -3,6 +3,7 @@ import json
 import time
 import telebot
 import redis
+import jsonpickle
 
 from firebase_admin import \
     credentials, \
@@ -27,7 +28,6 @@ BOT = telebot.TeleBot(TOKEN)
 
 USER = dict()
 CHAT_ID = None
-MESSAGES = []
 
 global \
     WAITING_FOR_INPUT, \
@@ -243,13 +243,13 @@ def handle_callback_query(call):
 # handle /start command
 @BOT.message_handler(commands=["start"])
 def initialize(message):
-    global MESSAGES
     global WORKOUT
     global RESET_STATE
     global CHAT_ID
     global USER
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
+
     remove_inline_replies()
 
     if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
@@ -277,16 +277,13 @@ def initialize(message):
 
         show_start_options(username=USER.get('first_name'))
 
-    CONN.set("user", USER)
-
 
 @BOT.message_handler(commands=["begin"])
 def begin_workout(message):
     global \
-        MESSAGES, \
         WORKOUT
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
@@ -300,11 +297,10 @@ def begin_workout(message):
 @BOT.message_handler(commands=["create"])
 def create_workout(message):
     global \
-        MESSAGES, \
         WORKOUT, \
         RESET_STATE
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
@@ -327,14 +323,13 @@ def proceed_to_next(message):
     :param message
     """
     global \
-        MESSAGES, \
         WAITING_FOR_EXERCISE_VIDEO_LINK, \
         WAITING_FOR_MUSCLES_WORKED, \
         WAITING_FOR_REP_COUNT, \
         WORKOUT, \
         CURRENT_EXERCISE_INDEX
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
     if WAITING_FOR_EXERCISE_VIDEO_LINK:
         # user skipped the video link entry
@@ -355,12 +350,11 @@ def proceed_to_next(message):
 @BOT.message_handler(commands=["previous"])
 def return_to_previous(message):
     global \
-        MESSAGES, \
         CURRENT_EXERCISE_INDEX, \
         WAITING_FOR_REP_COUNT, \
         WORKOUT
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
     if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX > 0:
         CURRENT_EXERCISE_INDEX -= 1
@@ -371,14 +365,13 @@ def return_to_previous(message):
 @BOT.message_handler(commands=["finish"])
 def finish(message):
     global \
-        MESSAGES, \
         WAITING_FOR_REP_COUNT, \
         CURRENT_EXERCISE_INDEX, \
         WORKOUT, \
         WAITING_FOR_INPUT, \
         USER
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
     if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.get('exercises')) - 1:
         # user is done with their workout. End workout and add it to their completed workouts
@@ -399,11 +392,10 @@ def finish(message):
 @BOT.message_handler(commands=["clear"])
 def clear_dialog(message):
     global \
-        MESSAGES, \
         WORKOUT, \
         RESET_STATE
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
@@ -416,14 +408,18 @@ def clear_dialog(message):
 
     send_message("Clearing chat...")
     time.sleep(1.5)
-    while MESSAGES:
+
+    messages = [jsonpickle.loads(x) for x in get_from_redis("MESSAGES")]
+    while messages:
         threshold = 86400
-        if MESSAGES[0].date < int(time.time()) - threshold:
+        if messages[0].date < int(time.time()) - threshold:
             # telegram doesnt allow bots to delete messages older than 2 days. Use 1 day threshold to play it safe
-            undeletable_messages.append(MESSAGES[0])
+            undeletable_messages.append(messages[0])
         else:
-            BOT.delete_message(CHAT_ID, MESSAGES[0].id)
-        MESSAGES = MESSAGES[1:]
+            BOT.delete_message(CHAT_ID, messages[0].id)
+
+        pop_from_redis("MESSAGES")
+        messages = [jsonpickle.loads(x) for x in get_from_redis("MESSAGES")] if exists_in_redis("MESSAGES") else None
 
     if undeletable_messages:
         send_message(
@@ -434,12 +430,11 @@ def clear_dialog(message):
 @BOT.message_handler(commands=["delete"])
 def handle_delete_workout(message):
     global \
-        MESSAGES, \
         WORKOUT, \
         RESET_STATE, \
         USER
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
@@ -460,9 +455,9 @@ def handle_delete_workout(message):
 
 @BOT.message_handler(commands=["view"])
 def view_workout(message):
-    global MESSAGES, WORKOUT, RESET_STATE
+    global WORKOUT, RESET_STATE
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
@@ -477,9 +472,9 @@ def view_workout(message):
 
 @BOT.message_handler(commands=["feedback"])
 def user_feedback(message):
-    global MESSAGES, WORKOUT, RESET_STATE
+    global WORKOUT, RESET_STATE
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
     if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
         confirm_reset_state()
@@ -493,9 +488,9 @@ def user_feedback(message):
 
 @BOT.message_handler(commands=["stats", "publish"])
 def feature_in_progress(message):
-    global MESSAGES, WORKOUT, RESET_STATE
+    global WORKOUT, RESET_STATE
 
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
@@ -520,7 +515,6 @@ def handle_user_input(message):
     :param message
     """
     global \
-        MESSAGES, \
         WAITING_FOR_INPUT, \
         WAITING_FOR_WORKOUT_TITLE, \
         WAITING_FOR_EXERCISE_NAME, \
@@ -530,7 +524,7 @@ def handle_user_input(message):
         WAITING_FOR_USER_FEEDBACK
 
     # log all message ids
-    MESSAGES.append(message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
     # only handle if the bot is also waiting for user input
     if WAITING_FOR_INPUT:
@@ -571,7 +565,6 @@ def show_start_options(call=None, username="username"):
 
 def send_message(message_text, reply_markup=None, parse_mode=""):
     global \
-        MESSAGES, \
         BOT, \
         CHAT_ID
 
@@ -581,31 +574,34 @@ def send_message(message_text, reply_markup=None, parse_mode=""):
         reply_markup=reply_markup, disable_web_page_preview=True,
         parse_mode=parse_mode)
 
-    MESSAGES.append(sent_message)
+    push_to_redis("MESSAGES", jsonpickle.dumps(sent_message))
 
 
 def send_edited_message(message_text, previous_message_id, reply_markup=None, parse_mode=""):
     global \
-        MESSAGES, \
         BOT, \
         CHAT_ID
 
     message_to_edit = None
     message_index = None
 
-    for ix, message in enumerate(MESSAGES):
+    messages = [jsonpickle.loads(x) for x in get_from_redis("MESSAGES")]
+
+    for ix, message in enumerate(messages):
         if message.id == previous_message_id:
             message_to_edit = message
             message_index = ix
             break
 
-    MESSAGES[message_index] = BOT.edit_message_text(
+    new_message = BOT.edit_message_text(
         message_text,
         CHAT_ID,
         message_to_edit.id,
         reply_markup=reply_markup,
         disable_web_page_preview=True,
         parse_mode=parse_mode)
+
+    set_list_index_to_redis("MESSAGES", message_index, jsonpickle.dumps(new_message))
 
 
 def choose_workout(call=None, comes_from=None):
@@ -797,7 +793,7 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             # unless specified (WORKOUT_INDEX not None)
             workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
 
-            USER = add_exercise_to_database(USER.get("id"), CUSTOM_EXERCISE, workout_index)
+            USER = add_exercise_to_database(USER, CUSTOM_EXERCISE, workout_index)
 
             # the most recently added exercise was this one, so update the global variable
             MOST_RECENTLY_ADDED_EXERCISE = CUSTOM_EXERCISE
@@ -868,7 +864,7 @@ def add_catalogue_exercise(call, catalogue_exercise):
         USER
 
     workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
-    USER = add_exercise_to_database(USER.get("id"), catalogue_exercise, workout_index)
+    USER = add_exercise_to_database(USER, catalogue_exercise, workout_index)
 
     # the most recently added exercise was this one, so update the global variable
     MOST_RECENTLY_ADDED_EXERCISE = catalogue_exercise
@@ -1144,9 +1140,9 @@ def prepare_for_markdown_v2(string):
 
 
 def remove_inline_replies():
-    global MESSAGES
     # since user interaction has proceeded, remove any previous inline reply markups.
-    for ix, message in enumerate(MESSAGES):
+    for message in get_from_redis("MESSAGES"):
+        message = jsonpickle.loads(message)
         if type(message.reply_markup) is telebot.types.InlineKeyboardMarkup:
             send_edited_message(message.text, message.id, reply_markup=None)
 
@@ -1190,6 +1186,41 @@ def get_digit_as_word(index):
         return f"{digits[index]}"
     else:
         return f"{index}th"
+
+
+def exists_in_redis(key):
+    return bool(CONN.exists(key))
+
+
+def get_from_redis(key):
+    if CONN.type(key) == "list":
+        return CONN.lrange(key, 0, -1)
+
+    elif CONN.type(key) == int and CONN.get(key) in (0, 1):
+        return bool(CONN.get(key))
+
+    return CONN.get("key")
+
+
+def set_to_redis(key, value):
+    if type(value) == bool:
+        value = int(value)
+
+    elif type(value) == dict:
+        value = json.dumps(value)
+    CONN.set(key, value)
+
+
+def push_to_redis(key, value):
+    CONN.rpush(key, value)
+
+
+def set_list_index_to_redis(key, index, value):
+    CONN.lset(key, index, value)
+
+
+def pop_from_redis(key):
+    CONN.lpop(key)
 
 
 if __name__ == "__main__":

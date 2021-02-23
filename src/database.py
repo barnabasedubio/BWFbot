@@ -68,13 +68,12 @@ def delete_saved_workout_from_database(user_id, workout_key):
     return get_user_from_database(user_id)
 
 
-def add_exercise_to_database(user_id, exercise, workout_index):
-    user = get_user_from_database(user_id)  # TODO: no DB call needed here if you use global var
-    user_node_id = get_user_node_key_from_database(user_id)
+def add_exercise_to_database(user, exercise, workout_index):
+    user_node_id = get_user_node_key_from_database(user.get("id"))
     workout_node_id = list(user.get('saved_workouts'))[workout_index]
     DB.reference(f"/users/{user_node_id}/saved_workouts/{workout_node_id}/exercises/").push(exercise)
     # return updated user
-    return get_user_from_database(user_id)
+    return get_user_from_database(user.get("id"))
 
 
 def add_completed_workout_to_database(user_id, workout):
