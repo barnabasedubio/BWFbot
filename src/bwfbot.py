@@ -27,7 +27,6 @@ TOKEN = config.get("telegram").get("token")
 BOT = telebot.TeleBot(TOKEN)
 
 USER = dict()
-CHAT_ID = None
 
 global \
     WAITING_FOR_INPUT, \
@@ -245,10 +244,10 @@ def handle_callback_query(call):
 def initialize(message):
     global WORKOUT
     global RESET_STATE
-    global CHAT_ID
     global USER
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
+    set_to_redis("CHAT_ID", str(message.chat.id))
 
     remove_inline_replies()
 
@@ -259,7 +258,6 @@ def initialize(message):
     # reset application state for every new session
     reset_state()
 
-    CHAT_ID = message.chat.id
     user_id = str(message.from_user.id)
 
     if bool(USER):
@@ -405,7 +403,7 @@ def clear_dialog(message):
     reset_state()
 
     undeletable_messages = []
-
+    chat_id = get_from_redis("CHAT_ID")
     send_message("Clearing chat...")
     time.sleep(1.5)
 
@@ -416,7 +414,7 @@ def clear_dialog(message):
             # telegram doesnt allow bots to delete messages older than 2 days. Use 1 day threshold to play it safe
             undeletable_messages.append(messages[0])
         else:
-            BOT.delete_message(CHAT_ID, messages[0].id)
+            BOT.delete_message(chat_id, messages[0].id)
 
         pop_from_redis("MESSAGES")
         messages = [jsonpickle.loads(x) for x in get_from_redis("MESSAGES")] if exists_in_redis("MESSAGES") else None
@@ -564,12 +562,11 @@ def show_start_options(call=None, username="username"):
 
 
 def send_message(message_text, reply_markup=None, parse_mode=""):
-    global \
-        BOT, \
-        CHAT_ID
+    global BOT
 
+    chat_id = get_from_redis("CHAT_ID")
     sent_message = BOT.send_message(
-        CHAT_ID,
+        chat_id,
         message_text,
         reply_markup=reply_markup, disable_web_page_preview=True,
         parse_mode=parse_mode)
@@ -578,12 +575,11 @@ def send_message(message_text, reply_markup=None, parse_mode=""):
 
 
 def send_edited_message(message_text, previous_message_id, reply_markup=None, parse_mode=""):
-    global \
-        BOT, \
-        CHAT_ID
+    global BOT
 
     message_to_edit = None
     message_index = None
+    chat_id = get_from_redis("CHAT_ID")
 
     messages = [jsonpickle.loads(x) for x in get_from_redis("MESSAGES")]
 
@@ -595,7 +591,7 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 
     new_message = BOT.edit_message_text(
         message_text,
-        CHAT_ID,
+        chat_id,
         message_to_edit.id,
         reply_markup=reply_markup,
         disable_web_page_preview=True,
@@ -1199,7 +1195,7 @@ def get_from_redis(key):
     elif CONN.type(key) == int and CONN.get(key) in (0, 1):
         return bool(CONN.get(key))
 
-    return CONN.get("key")
+    return CONN.get(key)
 
 
 def set_to_redis(key, value):
