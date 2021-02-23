@@ -1161,21 +1161,24 @@ def exists_in_redis(key):
 
 
 def get_from_redis(key):
+
     if CONN.type(key) == "list":
         return CONN.lrange(key, 0, -1)
 
-    elif CONN.type(key) == int and CONN.get(key) in (0, 1):
-        return bool(CONN.get(key))
+    retrieved_key = CONN.get(key)
+    if retrieved_key in ("True", "False"):
+        return retrieved_key == "True"
 
-    return CONN.get(key)
+    return retrieved_key
 
 
 def set_to_redis(key, value):
-    if type(value) == bool:
-        value = int(value)
-
-    elif type(value) == dict:
+    if type(value) == dict:
         value = json.dumps(value)
+
+    elif type(value) == bool:
+        value = str(value)
+
     CONN.set(key, value)
 
 
@@ -1192,5 +1195,4 @@ def pop_from_redis(key):
 
 
 if __name__ == "__main__":
-    reset_state()
     BOT.polling()
