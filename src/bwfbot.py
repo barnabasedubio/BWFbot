@@ -28,20 +28,27 @@ BOT = telebot.TeleBot(TOKEN)
 
 USER = dict()
 
+"""
+variables stored in REDIS:
+global:
+    MESSAGE
+    CHAT_ID
+input state:
+    WAITING_FOR_INPUT
+    WAITING_FOR_WORKOUT_TITLE
+    WAITING_FOR_EXERCISE_NAME
+    WAITING_FOR_EXERCISE_VIDEO_LINK
+    WAITING_FOR_MUSCLES_WORKED
+    WAITING_FOR_REP_COUNT
+    WAITING_FOR_USER_FEEDBACK
+"""
+
 global \
-    WAITING_FOR_INPUT, \
     WORKOUT, \
     WORKOUT_INDEX, \
-    WAITING_FOR_WORKOUT_TITLE, \
     CUSTOM_EXERCISE, \
     CATALOGUE_EXERCISE, \
     MOST_RECENTLY_ADDED_EXERCISE, \
-    WAITING_FOR_EXERCISE_NAME, \
-    WAITING_FOR_EXERCISE_VIDEO_LINK, \
-    WAITING_FOR_MUSCLES_WORKED, \
-    WAITING_FOR_SETUP_DONE, \
-    WAITING_FOR_REP_COUNT, \
-    WAITING_FOR_USER_FEEDBACK, \
     CURRENT_EXERCISE_INDEX, \
     PAST_WORKOUT_DATA, \
     EXERCISE_PATH, \
@@ -58,40 +65,30 @@ def confirm_reset_state():
 def reset_state():
     # reset the global state
     global \
-        WAITING_FOR_INPUT, \
         WORKOUT, \
         WORKOUT_INDEX, \
-        WAITING_FOR_WORKOUT_TITLE, \
         CUSTOM_EXERCISE, \
         CATALOGUE_EXERCISE, \
         MOST_RECENTLY_ADDED_EXERCISE, \
-        WAITING_FOR_EXERCISE_NAME, \
-        WAITING_FOR_EXERCISE_VIDEO_LINK, \
-        WAITING_FOR_MUSCLES_WORKED, \
-        WAITING_FOR_SETUP_DONE, \
-        WAITING_FOR_REP_COUNT, \
-        WAITING_FOR_USER_FEEDBACK, \
         CURRENT_EXERCISE_INDEX, \
         PAST_WORKOUT_DATA, \
         EXERCISE_PATH, \
         RESET_STATE
 
-    WAITING_FOR_INPUT = False
+    set_to_redis("WAITING_FOR_INPUT", False)
+    set_to_redis("WAITING_FOR_WORKOUT_TITLE", False)
+    set_to_redis("WAITING_FOR_EXERCISE_NAME", False)
+    set_to_redis("WAITING_FOR_EXERCISE_VIDEO_LINK", False)
+    set_to_redis("WAITING_FOR_MUSCLES_WORKED", False)
+    set_to_redis("WAITING_FOR_REP_COUNT", False)
+    set_to_redis("WAITING_FOR_USER_FEEDBACK", False)
 
     WORKOUT = None
     WORKOUT_INDEX = None
-    WAITING_FOR_WORKOUT_TITLE = False
 
     CUSTOM_EXERCISE = None
     CATALOGUE_EXERCISE = None
     MOST_RECENTLY_ADDED_EXERCISE = None
-
-    WAITING_FOR_EXERCISE_NAME = False
-    WAITING_FOR_EXERCISE_VIDEO_LINK = False
-    WAITING_FOR_MUSCLES_WORKED = False
-    WAITING_FOR_SETUP_DONE = False
-    WAITING_FOR_REP_COUNT = False
-    WAITING_FOR_USER_FEEDBACK = False
 
     CURRENT_EXERCISE_INDEX = 0
 
@@ -321,23 +318,20 @@ def proceed_to_next(message):
     :param message
     """
     global \
-        WAITING_FOR_EXERCISE_VIDEO_LINK, \
-        WAITING_FOR_MUSCLES_WORKED, \
-        WAITING_FOR_REP_COUNT, \
         WORKOUT, \
         CURRENT_EXERCISE_INDEX
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
-    if WAITING_FOR_EXERCISE_VIDEO_LINK:
+    if get_from_redis("WAITING_FOR_EXERCISE_VIDEO_LINK"):
         # user skipped the video link entry
         add_custom_exercise(message=message, message_type="EXERCISE_VIDEO_LINK", skip_setting=True)
 
-    elif WAITING_FOR_MUSCLES_WORKED:
+    elif get_from_redis("WAITING_FOR_MUSCLES_WORKED"):
         # user skipped the muscles worked entry
         add_custom_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED", skip_setting=True)
 
-    elif WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX != len(WORKOUT.get('exercises')) - 1:
+    elif get_from_redis("WAITING_FOR_REP_COUNT") and CURRENT_EXERCISE_INDEX != len(WORKOUT.get('exercises')) - 1:
         # display the next exercise in the workout to the user
         # if the user is on their last exercise, this logic is handled by the /finish handler instead
         CURRENT_EXERCISE_INDEX += 1
@@ -349,12 +343,11 @@ def proceed_to_next(message):
 def return_to_previous(message):
     global \
         CURRENT_EXERCISE_INDEX, \
-        WAITING_FOR_REP_COUNT, \
         WORKOUT
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
-    if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX > 0:
+    if get_from_redis("WAITING_FOR_REP_COUNT") and CURRENT_EXERCISE_INDEX > 0:
         CURRENT_EXERCISE_INDEX -= 1
         do_workout()
 
@@ -363,15 +356,13 @@ def return_to_previous(message):
 @BOT.message_handler(commands=["finish"])
 def finish(message):
     global \
-        WAITING_FOR_REP_COUNT, \
         CURRENT_EXERCISE_INDEX, \
         WORKOUT, \
-        WAITING_FOR_INPUT, \
         USER
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
-    if WAITING_FOR_REP_COUNT and CURRENT_EXERCISE_INDEX == len(WORKOUT.get('exercises')) - 1:
+    if get_from_redis("WAITING_FOR_REP_COUNT") and CURRENT_EXERCISE_INDEX == len(WORKOUT.get('exercises')) - 1:
         # user is done with their workout. End workout and add it to their completed workouts
         WORKOUT['duration'] = int(time.time()) - WORKOUT.get('started_at')
         WORKOUT['running'] = False
@@ -380,8 +371,8 @@ def finish(message):
         # reset exercise index
         CURRENT_EXERCISE_INDEX = 0  # reset
         # deactivate user input handling
-        WAITING_FOR_REP_COUNT = False
-        WAITING_FOR_INPUT = False
+        set_to_redis("WAITING_FOR_REP_COUNT", False)
+        set_to_redis("WAITING_FOR_INPUT", False)
 
         workout_completed()
 
@@ -512,35 +503,27 @@ def handle_user_input(message):
     similar to func proceed_to_next(), the context is derived from the global variables
     :param message
     """
-    global \
-        WAITING_FOR_INPUT, \
-        WAITING_FOR_WORKOUT_TITLE, \
-        WAITING_FOR_EXERCISE_NAME, \
-        WAITING_FOR_EXERCISE_VIDEO_LINK, \
-        WAITING_FOR_MUSCLES_WORKED, \
-        WAITING_FOR_REP_COUNT, \
-        WAITING_FOR_USER_FEEDBACK
 
     # log all message ids
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
     # only handle if the bot is also waiting for user input
-    if WAITING_FOR_INPUT:
+    if get_from_redis("WAITING_FOR_INPUT"):
         # create workout
-        if WAITING_FOR_WORKOUT_TITLE:
+        if get_from_redis("WAITING_FOR_WORKOUT_TITLE"):
             get_workout_title_from_input(message=message)
         # create exercise
-        elif WAITING_FOR_EXERCISE_NAME:
+        elif get_from_redis("WAITING_FOR_EXERCISE_NAME"):
             add_custom_exercise(message=message, message_type="EXERCISE_NAME")
-        elif WAITING_FOR_EXERCISE_VIDEO_LINK:
+        elif get_from_redis("WAITING_FOR_EXERCISE_VIDEO_LINK"):
             add_custom_exercise(message=message, message_type="EXERCISE_VIDEO_LINK")
-        elif WAITING_FOR_MUSCLES_WORKED:
+        elif get_from_redis("WAITING_FOR_MUSCLES_WORKED"):
             add_custom_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED")
         # add reps to exercise
-        elif WAITING_FOR_REP_COUNT:
+        elif get_from_redis("WAITING_FOR_REP_COUNT"):
             if message.text.isnumeric():
                 do_workout(True, message)
-        elif WAITING_FOR_USER_FEEDBACK:
+        elif get_from_redis("WAITING_FOR_USER_FEEDBACK"):
             handle_user_feedback(message)
 
 
@@ -650,9 +633,6 @@ def get_workout_title_from_input(call=None, message=None):
     :param message:
     :return:
     """
-    global \
-        WAITING_FOR_INPUT, \
-        WAITING_FOR_WORKOUT_TITLE
 
     if not message:
         message_text = '''*New workout*\n\nWhat would you like to name your workout?'''
@@ -668,14 +648,14 @@ def get_workout_title_from_input(call=None, message=None):
                 reply_markup=create_workout_go_back_markup(),
                 parse_mode="MarkdownV2")
 
-        WAITING_FOR_INPUT = True
-        WAITING_FOR_WORKOUT_TITLE = True
+        set_to_redis("WAITING_FOR_INPUT", True)
+        set_to_redis("WAITING_FOR_WORKOUT_TITLE", True)
 
     else:
         # received input, set global flags back to false
         remove_inline_replies()
-        WAITING_FOR_INPUT = False
-        WAITING_FOR_WORKOUT_TITLE = False
+        set_to_redis("WAITING_FOR_INPUT", False)
+        set_to_redis("WAITING_FOR_WORKOUT_TITLE", False)
         set_workout(message)
 
 
@@ -709,11 +689,10 @@ def set_workout(message):
 
 
 def add_exercise_options(call):
-    global WAITING_FOR_INPUT, WAITING_FOR_EXERCISE_NAME
 
     # in case the user clicked the back button after "add custom exercise", disable input flags
-    WAITING_FOR_INPUT = False
-    WAITING_FOR_EXERCISE_NAME = False
+    set_to_redis("WAITING_FOR_INPUT", False)
+    set_to_redis("WAITING_FOR_EXERCISE_NAME", False)
 
     send_edited_message(
         "How would you like to add a new exercise?",
@@ -735,19 +714,15 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
     global \
         CUSTOM_EXERCISE, \
         MOST_RECENTLY_ADDED_EXERCISE, \
-        WAITING_FOR_INPUT, \
-        WAITING_FOR_EXERCISE_NAME, \
-        WAITING_FOR_EXERCISE_VIDEO_LINK, \
-        WAITING_FOR_MUSCLES_WORKED, \
         WORKOUT_INDEX, \
         USER
 
-    WAITING_FOR_INPUT = True
+    set_to_redis("WAITING_FOR_INPUT", True)
 
     if not message and call:
         message_text = "Please give the exercise a name."
         send_edited_message(message_text, call.message.id, reply_markup=add_custom_exercise_go_back_markup())
-        WAITING_FOR_EXERCISE_NAME = True
+        set_to_redis("WAITING_FOR_EXERCISE_NAME", True)
     else:
         remove_inline_replies()  # remove the "go back" option, as it is clear the user wants to continue
 
@@ -755,15 +730,15 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             CUSTOM_EXERCISE = dict()
             CUSTOM_EXERCISE["id"] = str(uuid4())
             CUSTOM_EXERCISE['name'] = message.text
-            WAITING_FOR_EXERCISE_NAME = False
+            set_to_redis("WAITING_FOR_EXERCISE_NAME", False)
             # retrieved exercise name. Ask for youtube link
             send_message(
                 "Great!"
                 "\nWould you like to add a Youtube link associated with this exercise? If not, simply click /next.")
-            WAITING_FOR_EXERCISE_VIDEO_LINK = True
+            set_to_redis("WAITING_FOR_EXERCISE_VIDEO_LINK", True)
 
         elif message_type == "EXERCISE_VIDEO_LINK":
-            WAITING_FOR_EXERCISE_VIDEO_LINK = False
+            set_to_redis("WAITING_FOR_EXERCISE_VIDEO_LINK", False)
             if not skip_setting:
                 CUSTOM_EXERCISE['video_link'] = message.text
 
@@ -771,10 +746,10 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             send_message(
                 "How about a brief description of muscles worked?"
                 "\n\n(e.g 'chest, triceps, front delts')\n\nIf not, click /next to continue.")
-            WAITING_FOR_MUSCLES_WORKED = True
+            set_to_redis("WAITING_FOR_MUSCLES_WORKED", True)
 
         elif message_type == "EXERCISE_MUSCLES_WORKED":
-            WAITING_FOR_MUSCLES_WORKED = False
+            set_to_redis("WAITING_FOR_MUSCLES_WORKED", False)
             if not skip_setting:
                 # handle for empty entries (e.g ", , chest, ,")
                 muscles_worked = [x.strip() for x in message.text.split(",")]
@@ -783,7 +758,7 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
                 CUSTOM_EXERCISE['muscles_worked'] = muscles_worked
 
             # done. Add workout to users workouts.
-            WAITING_FOR_INPUT = False
+            set_to_redis("WAITING_FOR_INPUT", False)
 
             # default location to add exercise is the most recently added workout
             # unless specified (WORKOUT_INDEX not None)
@@ -920,8 +895,6 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     """
     global \
         WORKOUT, \
-        WAITING_FOR_REP_COUNT, \
-        WAITING_FOR_INPUT, \
         CURRENT_EXERCISE_INDEX, \
         PAST_WORKOUT_DATA, \
         USER
@@ -975,8 +948,8 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
                 reply_markup=view_exercise_details_markup()
             )
 
-        WAITING_FOR_REP_COUNT = True
-        WAITING_FOR_INPUT = True
+        set_to_redis("WAITING_FOR_REP_COUNT", True)
+        set_to_redis("WAITING_FOR_INPUT", True)
 
     else:
         rep_count = int(message.text)
@@ -1153,7 +1126,6 @@ def handle_explore_community():
 
 
 def handle_user_feedback(message=None):
-    global WAITING_FOR_INPUT, WAITING_FOR_USER_FEEDBACK
 
     if not message:
         send_message(
@@ -1161,8 +1133,8 @@ def handle_user_feedback(message=None):
             "Is there anything you would like to me to include, or improve upon?"
             "\n\nI am constantly trying to get better, so please pour your heart out!"
         )
-        WAITING_FOR_INPUT = True
-        WAITING_FOR_USER_FEEDBACK = True
+        set_to_redis("WAITING_FOR_INPUT", True)
+        set_to_redis("WAITING_FOR_USER_FEEDBACK", True)
     else:
         # received message. post it to feedback node in firebase
         feedback_object = {
@@ -1172,8 +1144,8 @@ def handle_user_feedback(message=None):
         add_feedback_to_database(feedback_object)
 
         send_message("Thanks a lot for your feedback! 😊")
-        WAITING_FOR_INPUT = False
-        WAITING_FOR_USER_FEEDBACK = False
+        set_to_redis("WAITING_FOR_INPUT", False)
+        set_to_redis("WAITING_FOR_USER_FEEDBACK", False)
 
 
 def get_digit_as_word(index):
