@@ -41,9 +41,10 @@ input state:
     WAITING_FOR_MUSCLES_WORKED
     WAITING_FOR_REP_COUNT
     WAITING_FOR_USER_FEEDBACK
-data:
+workout-related data:
     WORKOUT
     WORKOUT_INDEX
+    PAST_WORKOUT_DATA
 
 """
 
@@ -52,7 +53,6 @@ global \
     CATALOGUE_EXERCISE, \
     MOST_RECENTLY_ADDED_EXERCISE, \
     CURRENT_EXERCISE_INDEX, \
-    PAST_WORKOUT_DATA, \
     EXERCISE_PATH, \
     RESET_STATE
 
@@ -71,7 +71,6 @@ def reset_state():
         CATALOGUE_EXERCISE, \
         MOST_RECENTLY_ADDED_EXERCISE, \
         CURRENT_EXERCISE_INDEX, \
-        PAST_WORKOUT_DATA, \
         EXERCISE_PATH, \
         RESET_STATE
 
@@ -85,6 +84,7 @@ def reset_state():
     set_to_redis("WAITING_FOR_USER_FEEDBACK", False)
     set_to_redis("WORKOUT", "None")
     set_to_redis("WORKOUT_INDEX", "None")
+    set_to_redis("PAST_WORKOUT_DATA", "None")
 
     CUSTOM_EXERCISE = None
     CATALOGUE_EXERCISE = None
@@ -92,7 +92,6 @@ def reset_state():
 
     CURRENT_EXERCISE_INDEX = 0
 
-    PAST_WORKOUT_DATA = {}
     EXERCISE_PATH = []
 
     RESET_STATE = False
@@ -108,7 +107,6 @@ def handle_callback_query(call):
     global \
         RESET_STATE, \
         USER, \
-        PAST_WORKOUT_DATA, \
         EXERCISE_PATH, \
         CATALOGUE_EXERCISE
 
@@ -185,9 +183,10 @@ def handle_callback_query(call):
 
         if USER.get('completed_workouts'):
             # get previous workout data from user's completed workouts that use the saved workout as a template
-            PAST_WORKOUT_DATA = {node: workout
+            past_workout_data = {node: workout
                                  for (node, workout) in USER.get('completed_workouts').items()
                                  if USER.get('completed_workouts').get(node).get('template_id') == workout_id}
+            set_to_redis("PAST_WORKOUT_DATA", past_workout_data)
 
         if temp_workout.get('exercises'):
             send_edited_message("Let's go! 💪", call.message.id)
@@ -895,7 +894,6 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     """
     global \
         CURRENT_EXERCISE_INDEX, \
-        PAST_WORKOUT_DATA, \
         USER
 
     if not get_from_redis("WORKOUT"):
@@ -944,7 +942,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
             parse_mode="MarkdownV2")
 
         # view exercise details (such as the rolling average and other stats)
-        if PAST_WORKOUT_DATA:
+        if get_from_redis("PAST_WORKOUT_DATA"):
             send_message(
                 "Do you want to view your past performance with this exercise?",
                 reply_markup=view_exercise_details_markup()
@@ -964,15 +962,15 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
 
 def show_exercise_stats(call):
     global \
-        CURRENT_EXERCISE_INDEX, \
-        PAST_WORKOUT_DATA
+        CURRENT_EXERCISE_INDEX
 
     exercise_performance_history = []  # e.g: user's past performance on dips: [[8, 8, 7, 6] , [7, 7, 6, 7] , [9, 8, 9]]
     message_text = ""
 
-    for workout_node_id in PAST_WORKOUT_DATA:
-        current_exercise_node_id = list(PAST_WORKOUT_DATA.get(workout_node_id).get('exercises'))[CURRENT_EXERCISE_INDEX]
-        current_exercise = PAST_WORKOUT_DATA.get(workout_node_id).get('exercises').get(current_exercise_node_id)
+    past_workout_data = get_from_redis("PAST_WORKOUT_DATA")
+    for workout_node_id in past_workout_data:
+        current_exercise_node_id = list(past_workout_data.get(workout_node_id).get('exercises'))[CURRENT_EXERCISE_INDEX]
+        current_exercise = past_workout_data.get(workout_node_id).get('exercises').get(current_exercise_node_id)
         exercise_performance_history.append(current_exercise.get('reps') or [])
 
     # [[1,2,3] , [1,2,3,4] , [1,2,3,4,5]] --> most sets: 5 ([1,2,3,4,5])
