@@ -50,10 +50,10 @@ exercise-related data:
     CUSTOM_EXERCISE
     CATALOGUE_EXERCISE
     MOST_RECENTLY_ADDED_EXERCISE
+    EXERCISE_PATH
 """
 
 global \
-    EXERCISE_PATH, \
     RESET_STATE
 
 
@@ -67,7 +67,6 @@ def confirm_reset_state():
 def reset_state():
     # reset the global state
     global \
-        EXERCISE_PATH, \
         RESET_STATE
 
     # TODO: pipe this
@@ -85,8 +84,7 @@ def reset_state():
     set_to_redis("CUSTOM_EXERCISE", None)
     set_to_redis("CATALOGUE_EXERCISE", None)
     set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", None)
-
-    EXERCISE_PATH = []
+    delete_from_redis("EXERCISE_PATH")
 
     RESET_STATE = False
 
@@ -100,8 +98,7 @@ def handle_callback_query(call):
     """
     global \
         RESET_STATE, \
-        USER, \
-        EXERCISE_PATH
+        USER
 
     if not call.data == "add_catalogue_exercise":
         BOT.answer_callback_query(callback_query_id=call.id)  # remove loading spinner
@@ -152,15 +149,15 @@ def handle_callback_query(call):
     elif call.data.startswith("choose_exercise_from_catalogue:"):
         call.data = call.data.replace("choose_exercise_from_catalogue:", "")
         if call.data == "go_back":
-            if EXERCISE_PATH:
-                EXERCISE_PATH = EXERCISE_PATH[:-1]
+            if get_from_redis("EXERCISE_PATH"):
+                pop_from_redis("EXERCISE_PATH", "right")
             else:
                 # user already was in root level (movement groups) when they clicked go back
                 add_exercise_options(call)
                 return
         else:
-            EXERCISE_PATH.append(call.data)
-        choose_exercise_from_catalogue(call, EXERCISE_PATH)
+            push_to_redis("EXERCISE_PATH", call.data)
+        choose_exercise_from_catalogue(call, get_from_redis("EXERCISE_PATH"))
 
     elif call.data.startswith("START_WORKOUT:"):
         workout_id = call.data.replace("START_WORKOUT:", "")
@@ -392,7 +389,7 @@ def clear_dialog(message):
         else:
             BOT.delete_message(chat_id, messages[0].id)
 
-        pop_from_redis("MESSAGES")
+        pop_from_redis("MESSAGES", "right")
         messages = [jsonpickle.loads(x) for x in get_from_redis("MESSAGES")] if exists_in_redis("MESSAGES") else None
 
     if undeletable_messages:
@@ -820,7 +817,6 @@ def choose_exercise_from_catalogue(call, path=None):
 
 def add_catalogue_exercise(call, catalogue_exercise):
     global \
-        EXERCISE_PATH, \
         USER
 
     workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
@@ -833,7 +829,7 @@ def add_catalogue_exercise(call, catalogue_exercise):
     set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", catalogue_exercise)
 
     # reset the exercise path
-    EXERCISE_PATH = []
+    delete_from_redis("EXERCISE_PATH")
 
     exercise_added(call)
 
@@ -1174,6 +1170,10 @@ def get_from_redis(key):
     return retrieved_key
 
 
+def delete_from_redis(key):
+    CONN.delete(key)
+
+
 def set_to_redis(key, value):
     if type(value) == dict:
         value = jsonpickle.dumps(value)
@@ -1195,8 +1195,11 @@ def set_list_index_to_redis(key, index, value):
     CONN.lset(key, index, value)
 
 
-def pop_from_redis(key):
-    CONN.lpop(key)
+def pop_from_redis(key, pop_type):
+    if pop_type == "left":
+        CONN.lpop(key)
+    if pop_type == "right":
+        CONN.rpop(key)
 
 
 def increment_in_redis(key):
