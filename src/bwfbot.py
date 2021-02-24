@@ -47,10 +47,10 @@ workout-related data:
     PAST_WORKOUT_DATA
 exercise-related data:
     CURRENT_EXERCISE_INDEX
+    CUSTOM_EXERCISE
 """
 
 global \
-    CUSTOM_EXERCISE, \
     CATALOGUE_EXERCISE, \
     MOST_RECENTLY_ADDED_EXERCISE, \
     EXERCISE_PATH, \
@@ -67,7 +67,6 @@ def confirm_reset_state():
 def reset_state():
     # reset the global state
     global \
-        CUSTOM_EXERCISE, \
         CATALOGUE_EXERCISE, \
         MOST_RECENTLY_ADDED_EXERCISE, \
         EXERCISE_PATH, \
@@ -85,10 +84,10 @@ def reset_state():
     set_to_redis("WORKOUT_INDEX", "None")
     set_to_redis("PAST_WORKOUT_DATA", "None")
 
-    CUSTOM_EXERCISE = None
+    set_to_redis("CURRENT_EXERCISE_INDEX", 0)
+    set_to_redis("CUSTOM_EXERCISE", "None")
     CATALOGUE_EXERCISE = None
     MOST_RECENTLY_ADDED_EXERCISE = None
-    set_to_redis("CURRENT_EXERCISE_INDEX", 0)
 
     EXERCISE_PATH = []
 
@@ -705,7 +704,6 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
     """
 
     global \
-        CUSTOM_EXERCISE, \
         MOST_RECENTLY_ADDED_EXERCISE, \
         USER
 
@@ -719,9 +717,10 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
         remove_inline_replies()  # remove the "go back" option, as it is clear the user wants to continue
 
         if message_type == "EXERCISE_NAME":
-            CUSTOM_EXERCISE = dict()
-            CUSTOM_EXERCISE["id"] = str(uuid4())
-            CUSTOM_EXERCISE['name'] = message.text
+            custom_exercise = dict()
+            custom_exercise["id"] = str(uuid4())
+            custom_exercise['name'] = message.text
+            set_to_redis("CUSTOM_EXERCISE", custom_exercise)
             set_to_redis("WAITING_FOR_EXERCISE_NAME", False)
             # retrieved exercise name. Ask for youtube link
             send_message(
@@ -732,7 +731,9 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
         elif message_type == "EXERCISE_VIDEO_LINK":
             set_to_redis("WAITING_FOR_EXERCISE_VIDEO_LINK", False)
             if not skip_setting:
-                CUSTOM_EXERCISE['video_link'] = message.text
+                custom_exercise = get_from_redis("CUSTOM_EXERCISE")
+                custom_exercise['video_link'] = message.text
+                set_to_redis("CUSTOM_EXERCISE", custom_exercise)
 
             # muscles worked here
             send_message(
@@ -747,7 +748,9 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
                 muscles_worked = [x.strip() for x in message.text.split(",")]
                 muscles_worked = [x for x in muscles_worked if x]
                 muscles_worked = [muscle.strip().title() for muscle in muscles_worked]
-                CUSTOM_EXERCISE['muscles_worked'] = muscles_worked
+                custom_exercise = get_from_redis("CUSTOM_EXERCISE")
+                custom_exercise['muscles_worked'] = muscles_worked
+                set_to_redis("CUSTOM_EXERCISE", custom_exercise)
 
             # done. Add workout to users workouts.
             set_to_redis("WAITING_FOR_INPUT", False)
@@ -757,10 +760,13 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
             workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
 
-            USER = add_exercise_to_database(USER, CUSTOM_EXERCISE, workout_index)
+            custom_exercise = get_from_redis(""
+                                             "")
+
+            USER = add_exercise_to_database(USER, custom_exercise, workout_index)
 
             # the most recently added exercise was this one, so update the global variable
-            MOST_RECENTLY_ADDED_EXERCISE = CUSTOM_EXERCISE
+            MOST_RECENTLY_ADDED_EXERCISE = custom_exercise
 
             exercise_added()
 
