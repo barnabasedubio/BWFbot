@@ -26,8 +26,6 @@ CONN = redis.Redis(decode_responses=True)
 TOKEN = config.get("telegram").get("token")
 BOT = telebot.TeleBot(TOKEN)
 
-USER = dict()
-
 """
 global variables stored in REDIS:
 session:
@@ -91,8 +89,6 @@ def handle_callback_query(call):
     handles all inline keyboard responses
     :param call
     """
-    global \
-        USER
 
     if not call.data == "add_catalogue_exercise":
         BOT.answer_callback_query(callback_query_id=call.id)  # remove loading spinner
@@ -158,18 +154,19 @@ def handle_callback_query(call):
         temp_workout = {}
         counter = 0
         # get workout data from users saved workouts
-        for node_id in USER.get('saved_workouts'):
-            if USER.get('saved_workouts').get(node_id).get('id') == workout_id:
-                temp_workout = USER.get('saved_workouts').get(node_id)
+        user = get_from_redis("USER")
+        for node_id in user.get('saved_workouts'):
+            if user.get('saved_workouts').get(node_id).get('id') == workout_id:
+                temp_workout = user.get('saved_workouts').get(node_id)
                 break
             counter += 1
         set_to_redis("WORKOUT_INDEX", counter)
 
-        if USER.get('completed_workouts'):
+        if user.get('completed_workouts'):
             # get previous workout data from user's completed workouts that use the saved workout as a template
             past_workout_data = {node: workout
-                                 for (node, workout) in USER.get('completed_workouts').items()
-                                 if USER.get('completed_workouts').get(node).get('template_id') == workout_id}
+                                 for (node, workout) in user.get('completed_workouts').items()
+                                 if user.get('completed_workouts').get(node).get('template_id') == workout_id}
             set_to_redis("PAST_WORKOUT_DATA", past_workout_data)
 
         if temp_workout.get('exercises'):
@@ -186,17 +183,20 @@ def handle_callback_query(call):
         delete_workout(call=call, workout_id=workout_id)
 
     elif call.data.startswith("CONFIRM_DELETE_WORKOUT:"):
+        user = get_from_redis("USER")
         workout_id = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
-        workout = get_saved_workout_from_database(USER.get("id"), workout_id)
+        workout = get_saved_workout_from_database(user.get("id"), workout_id)
         workout_key = list(workout.keys())[0]
         workout_title = workout.get(workout_key).get("title")
 
-        USER = delete_saved_workout_from_database(USER.get("id"), workout_key)
+        user = delete_saved_workout_from_database(user.get("id"), workout_key)
+        set_to_redis("USER", user)
         send_edited_message(f"Done! {workout_title} is gone from your saved workouts.", call.message.id)
 
     elif call.data.startswith("ABORT_DELETE_WORKOUT:"):
+        user = get_from_redis("USER")
         workout_id = call.data.replace("ABORT_DELETE_WORKOUT:", "")
-        workout = get_saved_workout_from_database(USER.get("id"), workout_id)
+        workout = get_saved_workout_from_database(user.get("id"), workout_id)
         workout_key = list(workout.keys())[0]
         workout_title = workout.get(workout_key).get("title")
         send_edited_message(f"Gotcha! Will not delete {workout_title}.", call.message.id)
@@ -221,7 +221,6 @@ def handle_callback_query(call):
 # handle /start command
 @BOT.message_handler(commands=["start"])
 def initialize(message):
-    global USER
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     set_to_redis("CHAT_ID", str(message.chat.id))
@@ -237,21 +236,24 @@ def initialize(message):
     reset_state()
 
     user_id = str(message.from_user.id)
-
-    if bool(USER):
-        show_start_options(username=USER.get('first_name'))
+    user = get_from_redis("USER")
+    if bool(user):
+        show_start_options(username=user.get('first_name'))
 
     else:
-        USER = get_user_from_database(user_id)
-        if not USER:
+        user = get_user_from_database(user_id)
+        set_to_redis("USER", user)
+        if not user:
             # new user
-            USER = add_user_to_database(
+            new_user = add_user_to_database(
                 user_id,
                 message.from_user.first_name,
                 message.from_user.last_name,
                 message.from_user.username)
+            set_to_redis("USER", new_user)
 
-        show_start_options(username=USER.get('first_name'))
+        user = get_from_redis("USER")
+        show_start_options(username=user.get('first_name'))
 
 
 @BOT.message_handler(commands=["begin"])
@@ -328,8 +330,6 @@ def return_to_previous(message):
 # handle /finish command
 @BOT.message_handler(commands=["finish"])
 def finish(message):
-    global \
-        USER
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     workout = get_from_redis("WORKOUT")
@@ -340,7 +340,9 @@ def finish(message):
         workout['running'] = False
 
         set_to_redis("WORKOUT", workout)
-        USER = add_completed_workout_to_database(USER.get("id"), workout)
+        user = get_from_redis("USER")
+        user = add_completed_workout_to_database(user.get("id"), workout)
+        set_to_redis("USER", user)
 
         # reset exercise index
         set_to_redis("CURRENT_EXERCISE_INDEX", 0)  # reset
@@ -390,8 +392,6 @@ def clear_dialog(message):
 
 @BOT.message_handler(commands=["delete"])
 def handle_delete_workout(message):
-    global \
-        USER
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
@@ -402,13 +402,13 @@ def handle_delete_workout(message):
         return
 
     reset_state()
-
-    if USER.get('saved_workouts'):
+    user = get_from_redis("USER")
+    if user.get('saved_workouts'):
         message_text = \
             "Which workout would you like to delete?\n\n" \
             "(Note: this doesn't affect your already completed workouts, so no worries)"
 
-        send_message(message_text, reply_markup=delete_workout_markup(USER.get('saved_workouts')))
+        send_message(message_text, reply_markup=delete_workout_markup(user.get('saved_workouts')))
     else:
         send_message("You don't have any stored workouts.")
 
@@ -555,17 +555,17 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
 
 
 def choose_workout(call=None, comes_from=None):
-    global USER
 
-    if USER.get('saved_workouts'):
+    user = get_from_redis("USER")
+    if user.get('saved_workouts'):
         message_text = \
             "Which workout routine would you like to start?\n\n" \
             "If you want to view the exercises in each workout, click /view\\."
 
         if comes_from == "add_another_exercise":
-            reply_markup = list_workouts_markup(USER.get('saved_workouts'), comes_from="add_another_exercise")
+            reply_markup = list_workouts_markup(user.get('saved_workouts'), comes_from="add_another_exercise")
         else:
-            reply_markup = list_workouts_markup(USER.get('saved_workouts'))
+            reply_markup = list_workouts_markup(user.get('saved_workouts'))
 
         if call:
             send_edited_message(
@@ -636,7 +636,6 @@ def set_workout(message):
     :param message:
     :return:
     """
-    global USER
 
     workout_title = message.text
     new_workout = {
@@ -649,7 +648,9 @@ def set_workout(message):
     }
 
     # append new workout to user's list of saved workouts
-    USER = add_workout_to_database(USER.get("id"), new_workout)
+    user = get_from_redis("USER")
+    user = add_workout_to_database(user.get("id"), new_workout)
+    set_to_redis("USER", user)
 
     message_text = \
         f"*New Workout*\n\n*{prepare_for_markdown_v2(workout_title)}* has been created\\! " \
@@ -681,9 +682,6 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
     :param skip_setting
     :return:
     """
-
-    global \
-        USER
 
     set_to_redis("WAITING_FOR_INPUT", True)
 
@@ -739,7 +737,9 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
 
             custom_exercise = get_from_redis("CUSTOM_EXERCISE")
-            USER = add_exercise_to_database(USER, custom_exercise, workout_index)
+            user = get_from_redis("USER")
+            user = add_exercise_to_database(user, custom_exercise, workout_index)
+            set_to_redis("USER", user)
             # the most recently added exercise was this one, so update the global variable
             set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", custom_exercise)
 
@@ -802,14 +802,14 @@ def choose_exercise_from_catalogue(call, path=None):
 
 
 def add_catalogue_exercise(call, catalogue_exercise):
-    global \
-        USER
 
     workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
     workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
     catalogue_exercise["id"] = str(uuid4())
     set_to_redis("CATALOGUE_EXERCISE", catalogue_exercise)
-    USER = add_exercise_to_database(USER, catalogue_exercise, workout_index)
+    user = get_from_redis("USER")
+    user = add_exercise_to_database(user, catalogue_exercise, workout_index)
+    set_to_redis("USER", user)
 
     # the most recently added exercise was this one, so update the global variable
     set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", catalogue_exercise)
@@ -821,14 +821,12 @@ def add_catalogue_exercise(call, catalogue_exercise):
 
 
 def exercise_added(call=None):
-    global \
-        USER
 
     remove_inline_replies()
-
+    user = get_from_redis("USER")
     workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
     workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
-    workout_node_id = list(USER.get('saved_workouts'))[workout_index]
+    workout_node_id = list(user.get('saved_workouts'))[workout_index]
     most_recently_added_exercise = get_from_redis("MOST_RECENTLY_ADDED_EXERCISE")
 
     exercise_summary_text = \
@@ -837,7 +835,7 @@ def exercise_added(call=None):
 
     confirmation_text = \
         f"Added *{prepare_for_markdown_v2(most_recently_added_exercise.get('name'))}* to " \
-        f"*{USER.get('saved_workouts').get(workout_node_id).get('title')}*\\!\n" \
+        f"*{user.get('saved_workouts').get(workout_node_id).get('title')}*\\!\n" \
         f"Would you like to add another exercise?"
 
     message_text = exercise_summary_text + "\n" + confirmation_text
@@ -867,12 +865,11 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     :param workout_id
     :return:
     """
-    global \
-        USER
 
     if not get_from_redis("WORKOUT"):
+        user = get_from_redis("USER")
         # only happens once (when the workout gets started initially)
-        new_workout = get_saved_workout_from_database(USER.get("id"), workout_id)
+        new_workout = get_saved_workout_from_database(user.get("id"), workout_id)
         new_workout = new_workout.get(list(new_workout.keys())[0])
         # give the new workout a new id
         new_workout['id'] = str(uuid4())
@@ -1016,33 +1013,35 @@ def workout_completed():
 
 
 def delete_workout(call, workout_id):
-    global USER
-    workout_title = list(get_saved_workout_from_database(USER.get("id"), workout_id).values())[0].get('title')
+
+    user = get_from_redis("USER")
+    workout_title = list(get_saved_workout_from_database(user.get("id"), workout_id).values())[0].get('title')
     send_edited_message(
         f"Are you sure you want to delete {workout_title}?",
         call.message.id, reply_markup=delete_workout_confirmation_markup(workout_id))
 
 
 def handle_view_workout(call=None):
-    global USER
 
-    if USER.get('saved_workouts'):
+    user = get_from_redis("USER")
+    if user.get('saved_workouts'):
         if call:
             send_edited_message(
                 "Which workout would you like to view?",
                 call.message.id,
-                reply_markup=view_workout_details_markup(USER.get('saved_workouts')))
+                reply_markup=view_workout_details_markup(user.get('saved_workouts')))
         else:
             send_message(
                 "Which workout would you like to view?",
-                reply_markup=view_workout_details_markup(USER.get('saved_workouts')))
+                reply_markup=view_workout_details_markup(user.get('saved_workouts')))
     else:
         send_message("You don't have any stored workouts.")
 
 
 def show_workout_details(call, workout_id):
-    global USER
-    workout = get_saved_workout_from_database(USER.get("id"), workout_id)
+
+    user = get_from_redis("USER")
+    workout = get_saved_workout_from_database(user.get("id"), workout_id)
 
     send_edited_message(
         stringify_workout(workout),
@@ -1197,5 +1196,4 @@ def decrement_in_redis(key):
 
 
 if __name__ == "__main__":
-    reset_state()
     BOT.polling()
