@@ -49,10 +49,10 @@ exercise-related data:
     CURRENT_EXERCISE_INDEX
     CUSTOM_EXERCISE
     CATALOGUE_EXERCISE
+    MOST_RECENTLY_ADDED_EXERCISE
 """
 
 global \
-    MOST_RECENTLY_ADDED_EXERCISE, \
     EXERCISE_PATH, \
     RESET_STATE
 
@@ -67,7 +67,6 @@ def confirm_reset_state():
 def reset_state():
     # reset the global state
     global \
-        MOST_RECENTLY_ADDED_EXERCISE, \
         EXERCISE_PATH, \
         RESET_STATE
 
@@ -79,14 +78,13 @@ def reset_state():
     set_to_redis("WAITING_FOR_MUSCLES_WORKED", False)
     set_to_redis("WAITING_FOR_REP_COUNT", False)
     set_to_redis("WAITING_FOR_USER_FEEDBACK", False)
-    set_to_redis("WORKOUT", "None")
-    set_to_redis("WORKOUT_INDEX", "None")
-    set_to_redis("PAST_WORKOUT_DATA", "None")
-
+    set_to_redis("WORKOUT", None)
+    set_to_redis("WORKOUT_INDEX", None)
+    set_to_redis("PAST_WORKOUT_DATA", None)
     set_to_redis("CURRENT_EXERCISE_INDEX", 0)
-    set_to_redis("CUSTOM_EXERCISE", "None")
-    set_to_redis("CATALOGUE_EXERCISE", "None")
-    MOST_RECENTLY_ADDED_EXERCISE = None
+    set_to_redis("CUSTOM_EXERCISE", None)
+    set_to_redis("CATALOGUE_EXERCISE", None)
+    set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", None)
 
     EXERCISE_PATH = []
 
@@ -702,7 +700,6 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
     """
 
     global \
-        MOST_RECENTLY_ADDED_EXERCISE, \
         USER
 
     set_to_redis("WAITING_FOR_INPUT", True)
@@ -758,13 +755,10 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
             workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
 
-            custom_exercise = get_from_redis(""
-                                             "")
-
+            custom_exercise = get_from_redis("CUSTOM_EXERCISE")
             USER = add_exercise_to_database(USER, custom_exercise, workout_index)
-
             # the most recently added exercise was this one, so update the global variable
-            MOST_RECENTLY_ADDED_EXERCISE = custom_exercise
+            set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", custom_exercise)
 
             exercise_added()
 
@@ -826,7 +820,6 @@ def choose_exercise_from_catalogue(call, path=None):
 
 def add_catalogue_exercise(call, catalogue_exercise):
     global \
-        MOST_RECENTLY_ADDED_EXERCISE, \
         EXERCISE_PATH, \
         USER
 
@@ -837,7 +830,7 @@ def add_catalogue_exercise(call, catalogue_exercise):
     USER = add_exercise_to_database(USER, catalogue_exercise, workout_index)
 
     # the most recently added exercise was this one, so update the global variable
-    MOST_RECENTLY_ADDED_EXERCISE = catalogue_exercise
+    set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", catalogue_exercise)
 
     # reset the exercise path
     EXERCISE_PATH = []
@@ -847,7 +840,6 @@ def add_catalogue_exercise(call, catalogue_exercise):
 
 def exercise_added(call=None):
     global \
-        MOST_RECENTLY_ADDED_EXERCISE, \
         USER
 
     remove_inline_replies()
@@ -855,21 +847,22 @@ def exercise_added(call=None):
     workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
     workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
     workout_node_id = list(USER.get('saved_workouts'))[workout_index]
+    most_recently_added_exercise = get_from_redis("MOST_RECENTLY_ADDED_EXERCISE")
 
     exercise_summary_text = \
         f"Exercise summary:\n\n" \
-        f"{stringify_exercise(MOST_RECENTLY_ADDED_EXERCISE)}\n"
+        f"{stringify_exercise(most_recently_added_exercise)}\n"
 
     confirmation_text = \
-        f"Added *{prepare_for_markdown_v2(MOST_RECENTLY_ADDED_EXERCISE.get('name'))}* to " \
+        f"Added *{prepare_for_markdown_v2(most_recently_added_exercise.get('name'))}* to " \
         f"*{USER.get('saved_workouts').get(workout_node_id).get('title')}*\\!\n" \
         f"Would you like to add another exercise?"
 
     message_text = exercise_summary_text + "\n" + confirmation_text
 
     if call:
-        # TODO: answer callback query here for catalogue exercises that have been added
-        #  (in order to display loading spinner until confirmation message has been sent)
+        # answer callback query here for catalogue exercises that have been added
+        # (in order to display loading spinner until confirmation message has been sent)
         BOT.answer_callback_query(callback_query_id=call.id)
 
         send_edited_message(
@@ -1187,6 +1180,9 @@ def set_to_redis(key, value):
 
     elif type(value) == bool:
         value = str(value)
+
+    elif value is None:
+        value = "None"
 
     CONN.set(key, value)
 
