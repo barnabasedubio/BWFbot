@@ -29,8 +29,8 @@ BOT = telebot.TeleBot(TOKEN)
 USER = dict()
 
 """
-variables stored in REDIS:
-global:
+global variables stored in REDIS:
+session:
     MESSAGE
     CHAT_ID
 input state:
@@ -41,11 +41,14 @@ input state:
     WAITING_FOR_MUSCLES_WORKED
     WAITING_FOR_REP_COUNT
     WAITING_FOR_USER_FEEDBACK
+data:
+    WORKOUT
+    WORKOUT_INDEX
+
 """
 
 global \
     WORKOUT, \
-    WORKOUT_INDEX, \
     CUSTOM_EXERCISE, \
     CATALOGUE_EXERCISE, \
     MOST_RECENTLY_ADDED_EXERCISE, \
@@ -66,7 +69,6 @@ def reset_state():
     # reset the global state
     global \
         WORKOUT, \
-        WORKOUT_INDEX, \
         CUSTOM_EXERCISE, \
         CATALOGUE_EXERCISE, \
         MOST_RECENTLY_ADDED_EXERCISE, \
@@ -84,7 +86,7 @@ def reset_state():
     set_to_redis("WAITING_FOR_USER_FEEDBACK", False)
 
     WORKOUT = None
-    WORKOUT_INDEX = None
+    set_to_redis("WORKOUT_INDEX", "None")
 
     CUSTOM_EXERCISE = None
     CATALOGUE_EXERCISE = None
@@ -107,7 +109,6 @@ def handle_callback_query(call):
     """
     global \
         WORKOUT, \
-        WORKOUT_INDEX, \
         RESET_STATE, \
         USER, \
         PAST_WORKOUT_DATA, \
@@ -183,7 +184,7 @@ def handle_callback_query(call):
                 temp_workout = USER.get('saved_workouts').get(node_id)
                 break
             counter += 1
-        WORKOUT_INDEX = counter
+        set_to_redis("WORKOUT_INDEX", counter)
 
         if USER.get('completed_workouts'):
             # get previous workout data from user's completed workouts that use the saved workout as a template
@@ -714,7 +715,6 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
     global \
         CUSTOM_EXERCISE, \
         MOST_RECENTLY_ADDED_EXERCISE, \
-        WORKOUT_INDEX, \
         USER
 
     set_to_redis("WAITING_FOR_INPUT", True)
@@ -761,8 +761,9 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             set_to_redis("WAITING_FOR_INPUT", False)
 
             # default location to add exercise is the most recently added workout
-            # unless specified (WORKOUT_INDEX not None)
-            workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
+            # unless specified (workout index in redis is not None)
+            workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
+            workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
 
             USER = add_exercise_to_database(USER, CUSTOM_EXERCISE, workout_index)
 
@@ -829,12 +830,12 @@ def choose_exercise_from_catalogue(call, path=None):
 
 def add_catalogue_exercise(call, catalogue_exercise):
     global \
-        WORKOUT_INDEX, \
         MOST_RECENTLY_ADDED_EXERCISE, \
         EXERCISE_PATH, \
         USER
 
-    workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
+    workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
+    workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
     USER = add_exercise_to_database(USER, catalogue_exercise, workout_index)
 
     # the most recently added exercise was this one, so update the global variable
@@ -848,13 +849,13 @@ def add_catalogue_exercise(call, catalogue_exercise):
 
 def exercise_added(call=None):
     global \
-        WORKOUT_INDEX, \
         MOST_RECENTLY_ADDED_EXERCISE, \
         USER
 
     remove_inline_replies()
 
-    workout_index = WORKOUT_INDEX if type(WORKOUT_INDEX) is int else -1
+    workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
+    workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
     workout_node_id = list(USER.get('saved_workouts'))[workout_index]
 
     exercise_summary_text = \
@@ -1166,8 +1167,15 @@ def get_from_redis(key):
         return CONN.lrange(key, 0, -1)
 
     retrieved_key = CONN.get(key)
+
     if retrieved_key in ("True", "False"):
         return retrieved_key == "True"
+
+    if retrieved_key == "None":
+        return None
+
+    if retrieved_key.isnumeric():
+        return int(retrieved_key)
 
     return retrieved_key
 
@@ -1195,4 +1203,5 @@ def pop_from_redis(key):
 
 
 if __name__ == "__main__":
+    reset_state()
     BOT.polling()
