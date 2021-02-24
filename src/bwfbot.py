@@ -61,25 +61,24 @@ def confirm_reset_state():
 
 
 def reset_state():
-    # reset the global state
-
-    # TODO: pipe this
-    set_to_redis("WAITING_FOR_INPUT", False)
-    set_to_redis("WAITING_FOR_WORKOUT_TITLE", False)
-    set_to_redis("WAITING_FOR_EXERCISE_NAME", False)
-    set_to_redis("WAITING_FOR_EXERCISE_VIDEO_LINK", False)
-    set_to_redis("WAITING_FOR_MUSCLES_WORKED", False)
-    set_to_redis("WAITING_FOR_REP_COUNT", False)
-    set_to_redis("WAITING_FOR_USER_FEEDBACK", False)
-    set_to_redis("WORKOUT", None)
-    set_to_redis("WORKOUT_INDEX", None)
-    set_to_redis("PAST_WORKOUT_DATA", None)
-    set_to_redis("CURRENT_EXERCISE_INDEX", 0)
-    set_to_redis("CUSTOM_EXERCISE", None)
-    set_to_redis("CATALOGUE_EXERCISE", None)
-    set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", None)
-    delete_from_redis("EXERCISE_PATH")
-    set_to_redis("RESET_STATE", False)
+    delete_from_redis(
+        "WAITING_FOR_INPUT",
+        "WAITING_FOR_WORKOUT_TITLE",
+        "WAITING_FOR_EXERCISE_NAME",
+        "WAITING_FOR_EXERCISE_VIDEO_LINK",
+        "WAITING_FOR_MUSCLES_WORKED",
+        "WAITING_FOR_REP_COUNT",
+        "WAITING_FOR_USER_FEEDBACK",
+        "WORKOUT",
+        "WORKOUT_INDEX",
+        "PAST_WORKOUT_DATA",
+        "CUSTOM_EXERCISE",
+        "CATALOGUE_EXERCISE",
+        "MOST_RECENTLY_ADDED_EXERCISE",
+        "EXERCISE_PATH",
+        "RESET_STATE",
+        "CURRENT_EXERCISE_INDEX"
+    )
 
 
 # ----------------- HANDLERS --------------------
@@ -208,14 +207,15 @@ def handle_callback_query(call):
     elif call.data.startswith("RESET_STATE:"):
         answer = call.data.replace("RESET_STATE:", "")
         reset_state_flag = True if answer == "YES" else False
-        set_to_redis("RESET_STATE", reset_state_flag)
         if reset_state_flag:
+            set_to_redis("RESET_STATE", True)
             send_edited_message(
                 "Done! The running workout has been cancelled.",
                 call.message.id)
             send_message("Please resend your command.", reply_markup=telebot.types.ReplyKeyboardRemove())
         else:
             send_edited_message("Okay, I'll not cancel the running workout.", call.message.id)
+            delete_from_redis("RESET_STATE")
 
 
 # handle /start command
@@ -335,12 +335,7 @@ def finish(message):
         user = add_completed_workout_to_database(user.get("id"), workout)
         set_to_redis("USER", user)
 
-        # reset exercise index
-        set_to_redis("CURRENT_EXERCISE_INDEX", 0)  # reset
-        # deactivate user input handling
-        set_to_redis("WAITING_FOR_REP_COUNT", False)
-        set_to_redis("WAITING_FOR_INPUT", False)
-
+        delete_from_redis("WAITING_FOR_INPUT", "WAITING_FOR_REP_COUNT", "CURRENT_EXERCISE_INDEX")
         workout_completed()
 
 
@@ -477,7 +472,10 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
     message_index = None
     chat_id = get_from_redis("CHAT_ID")
 
-    messages = [jsonpickle.loads(x) for x in get_from_redis("SENT_MESSAGES")]
+    messages = \
+        [jsonpickle.loads(x) for x in get_from_redis("SENT_MESSAGES")] \
+        if exists_in_redis("SENT_MESSAGES") \
+        else []
 
     for ix, message in enumerate(messages):
         if message.id == previous_message_id:
@@ -567,8 +565,7 @@ def get_workout_title_from_input(call=None, message=None):
     else:
         # received input, set global flags back to false
         remove_inline_replies()
-        set_to_redis("WAITING_FOR_INPUT", False)
-        set_to_redis("WAITING_FOR_WORKOUT_TITLE", False)
+        delete_from_redis("WAITING_FOR_INPUT", "WAITING_FOR_WORKOUT_TITLE")
         set_workout(message)
 
 
@@ -605,8 +602,7 @@ def set_workout(message):
 def add_exercise_options(call):
 
     # in case the user clicked the back button after "add custom exercise", disable input flags
-    set_to_redis("WAITING_FOR_INPUT", False)
-    set_to_redis("WAITING_FOR_EXERCISE_NAME", False)
+    delete_from_redis("WAITING_FOR_INPUT", "WAITING_FOR_EXERCISE_NAME")
 
     send_edited_message(
         "How would you like to add a new exercise?",
@@ -639,7 +635,7 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             custom_exercise["id"] = str(uuid4())
             custom_exercise['name'] = message.text
             set_to_redis("CUSTOM_EXERCISE", custom_exercise)
-            set_to_redis("WAITING_FOR_EXERCISE_NAME", False)
+            delete_from_redis("WAITING_FOR_EXERCISE_NAME")
             # retrieved exercise name. Ask for youtube link
             send_message(
                 "Great!"
@@ -647,7 +643,7 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             set_to_redis("WAITING_FOR_EXERCISE_VIDEO_LINK", True)
 
         elif message_type == "EXERCISE_VIDEO_LINK":
-            set_to_redis("WAITING_FOR_EXERCISE_VIDEO_LINK", False)
+            delete_from_redis("WAITING_FOR_EXERCISE_VIDEO_LINK")
             if not skip_setting:
                 custom_exercise = get_from_redis("CUSTOM_EXERCISE")
                 custom_exercise['video_link'] = message.text
@@ -660,7 +656,7 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             set_to_redis("WAITING_FOR_MUSCLES_WORKED", True)
 
         elif message_type == "EXERCISE_MUSCLES_WORKED":
-            set_to_redis("WAITING_FOR_MUSCLES_WORKED", False)
+            delete_from_redis("WAITING_FOR_MUSCLES_WORKED")
             if not skip_setting:
                 # handle for empty entries (e.g ", , chest, ,")
                 muscles_worked = [x.strip() for x in message.text.split(",")]
@@ -671,7 +667,7 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
                 set_to_redis("CUSTOM_EXERCISE", custom_exercise)
 
             # done. Add workout to users workouts.
-            set_to_redis("WAITING_FOR_INPUT", False)
+            delete_from_redis("WAITING_FOR_INPUT")
 
             # default location to add exercise is the most recently added workout
             # unless specified (workout index in redis is not None)
@@ -821,6 +817,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
         new_workout['started_at'] = int(time.time())
 
         set_to_redis("WORKOUT", new_workout)
+        set_to_redis("CURRENT_EXERCISE_INDEX", 0)
 
     # create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
     exercise_node_ids = list(get_from_redis("WORKOUT").get('exercises'))
@@ -1030,8 +1027,6 @@ def remove_inline_replies():
             message = jsonpickle.loads(message)
             if type(message.reply_markup) is telebot.types.InlineKeyboardMarkup:
                 send_edited_message(message.text, message.id, reply_markup=None)
-        # since all inline replies have been dealt with, the messages list is no longer needed
-        delete_from_redis("SENT_MESSAGES")
 
 
 def handle_community_request(call):
@@ -1062,8 +1057,7 @@ def handle_user_feedback(message=None):
         add_feedback_to_database(feedback_object)
 
         send_message("Thanks a lot for your feedback! 😊")
-        set_to_redis("WAITING_FOR_INPUT", False)
-        set_to_redis("WAITING_FOR_USER_FEEDBACK", False)
+        delete_from_redis("WAITING_FOR_INPUT", "WAITING_FOR_USER_FEEDBACK")
 
 
 def get_digit_as_word(index):
@@ -1100,8 +1094,8 @@ def get_from_redis(key):
     return retrieved_key
 
 
-def delete_from_redis(key):
-    CONN.delete(key)
+def delete_from_redis(*args):
+    CONN.delete(*args)
 
 
 def set_to_redis(key, value):
