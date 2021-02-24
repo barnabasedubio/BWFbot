@@ -48,7 +48,6 @@ data:
 """
 
 global \
-    WORKOUT, \
     CUSTOM_EXERCISE, \
     CATALOGUE_EXERCISE, \
     MOST_RECENTLY_ADDED_EXERCISE, \
@@ -68,7 +67,6 @@ def confirm_reset_state():
 def reset_state():
     # reset the global state
     global \
-        WORKOUT, \
         CUSTOM_EXERCISE, \
         CATALOGUE_EXERCISE, \
         MOST_RECENTLY_ADDED_EXERCISE, \
@@ -77,6 +75,7 @@ def reset_state():
         EXERCISE_PATH, \
         RESET_STATE
 
+    # TODO: pipe this
     set_to_redis("WAITING_FOR_INPUT", False)
     set_to_redis("WAITING_FOR_WORKOUT_TITLE", False)
     set_to_redis("WAITING_FOR_EXERCISE_NAME", False)
@@ -84,8 +83,7 @@ def reset_state():
     set_to_redis("WAITING_FOR_MUSCLES_WORKED", False)
     set_to_redis("WAITING_FOR_REP_COUNT", False)
     set_to_redis("WAITING_FOR_USER_FEEDBACK", False)
-
-    WORKOUT = None
+    set_to_redis("WORKOUT", "None")
     set_to_redis("WORKOUT_INDEX", "None")
 
     CUSTOM_EXERCISE = None
@@ -108,7 +106,6 @@ def handle_callback_query(call):
     :param call
     """
     global \
-        WORKOUT, \
         RESET_STATE, \
         USER, \
         PAST_WORKOUT_DATA, \
@@ -240,7 +237,6 @@ def handle_callback_query(call):
 # handle /start command
 @BOT.message_handler(commands=["start"])
 def initialize(message):
-    global WORKOUT
     global RESET_STATE
     global USER
 
@@ -249,7 +245,8 @@ def initialize(message):
 
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+    workout = get_from_redis("WORKOUT")
+    if workout and workout.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -276,13 +273,12 @@ def initialize(message):
 
 @BOT.message_handler(commands=["begin"])
 def begin_workout(message):
-    global \
-        WORKOUT
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+    workout = get_from_redis("WORKOUT")
+    if workout and workout.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -293,13 +289,13 @@ def begin_workout(message):
 @BOT.message_handler(commands=["create"])
 def create_workout(message):
     global \
-        WORKOUT, \
         RESET_STATE
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+    workout = get_from_redis("WORKOUT")
+    if workout and workout.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -319,7 +315,6 @@ def proceed_to_next(message):
     :param message
     """
     global \
-        WORKOUT, \
         CURRENT_EXERCISE_INDEX
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
@@ -332,7 +327,8 @@ def proceed_to_next(message):
         # user skipped the muscles worked entry
         add_custom_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED", skip_setting=True)
 
-    elif get_from_redis("WAITING_FOR_REP_COUNT") and CURRENT_EXERCISE_INDEX != len(WORKOUT.get('exercises')) - 1:
+    elif get_from_redis("WAITING_FOR_REP_COUNT") and \
+            CURRENT_EXERCISE_INDEX != len(get_from_redis("WORKOUT").get('exercises')) - 1:
         # display the next exercise in the workout to the user
         # if the user is on their last exercise, this logic is handled by the /finish handler instead
         CURRENT_EXERCISE_INDEX += 1
@@ -343,8 +339,7 @@ def proceed_to_next(message):
 @BOT.message_handler(commands=["previous"])
 def return_to_previous(message):
     global \
-        CURRENT_EXERCISE_INDEX, \
-        WORKOUT
+        CURRENT_EXERCISE_INDEX
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
@@ -358,17 +353,18 @@ def return_to_previous(message):
 def finish(message):
     global \
         CURRENT_EXERCISE_INDEX, \
-        WORKOUT, \
         USER
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
-
-    if get_from_redis("WAITING_FOR_REP_COUNT") and CURRENT_EXERCISE_INDEX == len(WORKOUT.get('exercises')) - 1:
+    workout = get_from_redis("WORKOUT")
+    if get_from_redis("WAITING_FOR_REP_COUNT") and CURRENT_EXERCISE_INDEX == len(workout.get('exercises')) - 1:
         # user is done with their workout. End workout and add it to their completed workouts
-        WORKOUT['duration'] = int(time.time()) - WORKOUT.get('started_at')
-        WORKOUT['running'] = False
+        workout['duration'] = int(time.time()) - workout.get('started_at')
+        workout['running'] = False
 
-        USER = add_completed_workout_to_database(USER.get("id"), WORKOUT)
+        set_to_redis("WORKOUT", workout)
+        USER = add_completed_workout_to_database(USER.get("id"), workout)
+
         # reset exercise index
         CURRENT_EXERCISE_INDEX = 0  # reset
         # deactivate user input handling
@@ -382,13 +378,13 @@ def finish(message):
 @BOT.message_handler(commands=["clear"])
 def clear_dialog(message):
     global \
-        WORKOUT, \
         RESET_STATE
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+    workout = get_from_redis("WORKOUT")
+    if workout and workout.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -420,14 +416,14 @@ def clear_dialog(message):
 @BOT.message_handler(commands=["delete"])
 def handle_delete_workout(message):
     global \
-        WORKOUT, \
         RESET_STATE, \
         USER
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+    workout = get_from_redis("WORKOUT")
+    if workout and workout.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -445,12 +441,13 @@ def handle_delete_workout(message):
 
 @BOT.message_handler(commands=["view"])
 def view_workout(message):
-    global WORKOUT, RESET_STATE
+    global RESET_STATE
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+    workout = get_from_redis("WORKOUT")
+    if workout and workout.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -462,11 +459,12 @@ def view_workout(message):
 
 @BOT.message_handler(commands=["feedback"])
 def user_feedback(message):
-    global WORKOUT, RESET_STATE
+    global RESET_STATE
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
-    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+    workout = get_from_redis("WORKOUT")
+    if workout and workout.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -478,12 +476,13 @@ def user_feedback(message):
 
 @BOT.message_handler(commands=["stats", "publish"])
 def feature_in_progress(message):
-    global WORKOUT, RESET_STATE
+    global RESET_STATE
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
-    if WORKOUT and WORKOUT.get('running') and not RESET_STATE:
+    workout = get_from_redis("WORKOUT")
+    if workout and workout.get('running') and not RESET_STATE:
         confirm_reset_state()
         return
 
@@ -895,33 +894,35 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     :return:
     """
     global \
-        WORKOUT, \
         CURRENT_EXERCISE_INDEX, \
         PAST_WORKOUT_DATA, \
         USER
 
-    if not WORKOUT:
+    if not get_from_redis("WORKOUT"):
         # only happens once (when the workout gets started initially)
-        WORKOUT = get_saved_workout_from_database(USER.get("id"), workout_id)
-        WORKOUT = WORKOUT.get(list(WORKOUT.keys())[0])
+        new_workout = get_saved_workout_from_database(USER.get("id"), workout_id)
+        new_workout = new_workout.get(list(new_workout.keys())[0])
         # give the new workout a new id
-        WORKOUT['id'] = str(uuid4())
-        WORKOUT['template_id'] = workout_id
-        WORKOUT['created_at'] = None  # this is only needed for the template
-        WORKOUT['running'] = True
-        WORKOUT['started_at'] = int(time.time())
+        new_workout['id'] = str(uuid4())
+        new_workout['template_id'] = workout_id
+        new_workout['created_at'] = None  # this is only needed for the template
+        new_workout['running'] = True
+        new_workout['started_at'] = int(time.time())
+
+        set_to_redis("WORKOUT", new_workout)
 
     # create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
-    exercise_node_ids = list(WORKOUT.get('exercises'))
+    exercise_node_ids = list(get_from_redis("WORKOUT").get('exercises'))
     current_exercise_node_id = exercise_node_ids[CURRENT_EXERCISE_INDEX]
-    current_exercise = WORKOUT.get('exercises').get(current_exercise_node_id)
+    workout = get_from_redis("WORKOUT")
+    current_exercise = workout.get('exercises').get(current_exercise_node_id)
 
     if not new_rep_entry:
         about_to_finish = False
         pre_text = "Next up:\n\n"
         next_command = "/next"
 
-        if current_exercise.get('id') == WORKOUT.get('exercises').get(exercise_node_ids[-1]).get('id'):
+        if current_exercise.get('id') == workout.get('exercises').get(exercise_node_ids[-1]).get('id'):
             about_to_finish = True
             pre_text = "Almost done\\!\n\n"
             next_command = "/finish"
@@ -958,6 +959,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
             current_exercise['reps'] = []
 
         current_exercise['reps'].append(rep_count)
+        set_to_redis("WORKOUT", workout)
 
 
 def show_exercise_stats(call):
@@ -1017,16 +1019,16 @@ def show_exercise_stats(call):
 
 
 def workout_completed():
-    global WORKOUT
 
     send_message("Great job 💪 You're done!")
 
     # send workout report
     # the report consists of: total rep amount | average reps per set for ever exercise.
     report = "📝 *Workout Report*\n\n"
-    report += f"_Duration_: \\~ *{round(WORKOUT.get('duration') / 60)}* minutes\n\n"
-    for exercise_node_id in WORKOUT.get('exercises'):
-        exercise = WORKOUT.get('exercises').get(exercise_node_id)
+    workout = get_from_redis("WORKOUT")
+    report += f"_Duration_: \\~ *{round(workout.get('duration') / 60)}* minutes\n\n"
+    for exercise_node_id in workout.get('exercises'):
+        exercise = workout.get('exercises').get(exercise_node_id)
         if exercise.get('reps'):
             total = sum(exercise.get('reps'))
             sets = len(exercise.get('reps'))
@@ -1171,18 +1173,21 @@ def get_from_redis(key):
     if retrieved_key in ("True", "False"):
         return retrieved_key == "True"
 
-    if retrieved_key == "None":
+    if retrieved_key == "None" or retrieved_key is None:
         return None
 
     if retrieved_key.isnumeric():
         return int(retrieved_key)
+
+    if retrieved_key.startswith("{") and retrieved_key.endswith("}"):
+        return jsonpickle.loads(retrieved_key)
 
     return retrieved_key
 
 
 def set_to_redis(key, value):
     if type(value) == dict:
-        value = json.dumps(value)
+        value = jsonpickle.dumps(value)
 
     elif type(value) == bool:
         value = str(value)
