@@ -222,7 +222,6 @@ def handle_callback_query(call):
 @BOT.message_handler(commands=["start"])
 def initialize(message):
 
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     set_to_redis("CHAT_ID", str(message.chat.id))
 
     remove_inline_replies()
@@ -259,7 +258,6 @@ def initialize(message):
 @BOT.message_handler(commands=["begin"])
 def begin_workout(message):
 
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
@@ -274,7 +272,6 @@ def begin_workout(message):
 @BOT.message_handler(commands=["create"])
 def create_workout(message):
 
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
@@ -298,8 +295,6 @@ def proceed_to_next(message):
     :param message
     """
 
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
-
     if get_from_redis("WAITING_FOR_EXERCISE_VIDEO_LINK"):
         # user skipped the video link entry
         add_custom_exercise(message=message, message_type="EXERCISE_VIDEO_LINK", skip_setting=True)
@@ -320,8 +315,6 @@ def proceed_to_next(message):
 @BOT.message_handler(commands=["previous"])
 def return_to_previous(message):
 
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
-
     if get_from_redis("WAITING_FOR_REP_COUNT") and get_from_redis("CURRENT_EXERCISE_INDEX") > 0:
         decrement_in_redis("CURRENT_EXERCISE_INDEX")
         do_workout()
@@ -330,8 +323,6 @@ def return_to_previous(message):
 # handle /finish command
 @BOT.message_handler(commands=["finish"])
 def finish(message):
-
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     workout = get_from_redis("WORKOUT")
     if get_from_redis("WAITING_FOR_REP_COUNT") and \
             get_from_redis("CURRENT_EXERCISE_INDEX") == len(workout.get('exercises')) - 1:
@@ -353,47 +344,8 @@ def finish(message):
         workout_completed()
 
 
-# handle clear request
-@BOT.message_handler(commands=["clear"])
-def clear_dialog(message):
-
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
-    remove_inline_replies()
-
-    workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
-        confirm_reset_state()
-        return
-
-    reset_state()
-
-    undeletable_messages = []
-    chat_id = get_from_redis("CHAT_ID")
-    send_message("Clearing chat...")
-    time.sleep(1.5)
-
-    messages = [jsonpickle.loads(x) for x in get_from_redis("MESSAGES")]
-    while messages:
-        threshold = 86400
-        if messages[0].date < int(time.time()) - threshold:
-            # telegram doesnt allow bots to delete messages older than 2 days. Use 1 day threshold to play it safe
-            undeletable_messages.append(messages[0])
-        else:
-            BOT.delete_message(chat_id, messages[0].id)
-
-        pop_from_redis("MESSAGES", "right")
-        messages = [jsonpickle.loads(x) for x in get_from_redis("MESSAGES")] if exists_in_redis("MESSAGES") else None
-
-    if undeletable_messages:
-        send_message(
-            "I'm sorry, sadly I am unable to delete messages that are older than a day."
-            "Please click 'clear history' in the chat options to remove everything.")
-
-
 @BOT.message_handler(commands=["delete"])
 def handle_delete_workout(message):
-
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
@@ -415,8 +367,6 @@ def handle_delete_workout(message):
 
 @BOT.message_handler(commands=["view"])
 def view_workout(message):
-
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
@@ -432,9 +382,6 @@ def view_workout(message):
 
 @BOT.message_handler(commands=["feedback"])
 def user_feedback(message):
-
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
-
     workout = get_from_redis("WORKOUT")
     if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
         confirm_reset_state()
@@ -448,8 +395,6 @@ def user_feedback(message):
 
 @BOT.message_handler(commands=["stats", "publish"])
 def feature_in_progress(message):
-
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
@@ -474,9 +419,6 @@ def handle_user_input(message):
     similar to func proceed_to_next(), the context is derived from the global variables
     :param message
     """
-
-    # log all message ids
-    push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
     # only handle if the bot is also waiting for user input
     if get_from_redis("WAITING_FOR_INPUT"):
@@ -525,7 +467,7 @@ def send_message(message_text, reply_markup=None, parse_mode=""):
         reply_markup=reply_markup, disable_web_page_preview=True,
         parse_mode=parse_mode)
 
-    push_to_redis("MESSAGES", jsonpickle.dumps(sent_message))
+    push_to_redis("SENT_MESSAGES", jsonpickle.dumps(sent_message))
 
 
 def send_edited_message(message_text, previous_message_id, reply_markup=None, parse_mode=""):
@@ -535,7 +477,7 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
     message_index = None
     chat_id = get_from_redis("CHAT_ID")
 
-    messages = [jsonpickle.loads(x) for x in get_from_redis("MESSAGES")]
+    messages = [jsonpickle.loads(x) for x in get_from_redis("SENT_MESSAGES")]
 
     for ix, message in enumerate(messages):
         if message.id == previous_message_id:
@@ -551,7 +493,7 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
         disable_web_page_preview=True,
         parse_mode=parse_mode)
 
-    set_list_index_to_redis("MESSAGES", message_index, jsonpickle.dumps(new_message))
+    set_list_index_to_redis("SENT_MESSAGES", message_index, jsonpickle.dumps(new_message))
 
 
 def choose_workout(call=None, comes_from=None):
@@ -988,7 +930,7 @@ def show_exercise_stats(call):
 
 def workout_completed():
 
-    send_message("Great job 💪 You're done!")
+    send_message("Great job 💫 You're done!")
 
     # send workout report
     # the report consists of: total rep amount | average reps per set for ever exercise.
@@ -1083,10 +1025,13 @@ def prepare_for_markdown_v2(string):
 
 def remove_inline_replies():
     # since user interaction has proceeded, remove any previous inline reply markups.
-    for message in get_from_redis("MESSAGES"):
-        message = jsonpickle.loads(message)
-        if type(message.reply_markup) is telebot.types.InlineKeyboardMarkup:
-            send_edited_message(message.text, message.id, reply_markup=None)
+    if exists_in_redis("SENT_MESSAGES"):
+        for message in get_from_redis("SENT_MESSAGES"):
+            message = jsonpickle.loads(message)
+            if type(message.reply_markup) is telebot.types.InlineKeyboardMarkup:
+                send_edited_message(message.text, message.id, reply_markup=None)
+        # since all inline replies have been dealt with, the messages list is no longer needed
+        delete_from_redis("SENT_MESSAGES")
 
 
 def handle_community_request(call):
