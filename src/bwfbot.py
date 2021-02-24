@@ -41,6 +41,7 @@ input state:
     WAITING_FOR_MUSCLES_WORKED
     WAITING_FOR_REP_COUNT
     WAITING_FOR_USER_FEEDBACK
+    RESET_STATE
 workout-related data:
     WORKOUT
     WORKOUT_INDEX
@@ -53,9 +54,6 @@ exercise-related data:
     EXERCISE_PATH
 """
 
-global \
-    RESET_STATE
-
 
 def confirm_reset_state():
     send_message(
@@ -66,8 +64,6 @@ def confirm_reset_state():
 
 def reset_state():
     # reset the global state
-    global \
-        RESET_STATE
 
     # TODO: pipe this
     set_to_redis("WAITING_FOR_INPUT", False)
@@ -85,8 +81,7 @@ def reset_state():
     set_to_redis("CATALOGUE_EXERCISE", None)
     set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", None)
     delete_from_redis("EXERCISE_PATH")
-
-    RESET_STATE = False
+    set_to_redis("RESET_STATE", False)
 
 
 # ----------------- HANDLERS --------------------
@@ -97,7 +92,6 @@ def handle_callback_query(call):
     :param call
     """
     global \
-        RESET_STATE, \
         USER
 
     if not call.data == "add_catalogue_exercise":
@@ -213,8 +207,9 @@ def handle_callback_query(call):
 
     elif call.data.startswith("RESET_STATE:"):
         answer = call.data.replace("RESET_STATE:", "")
-        RESET_STATE = True if answer == "YES" else False
-        if RESET_STATE:
+        reset_state_flag = True if answer == "YES" else False
+        set_to_redis("RESET_STATE", reset_state_flag)
+        if reset_state_flag:
             send_edited_message(
                 "Done! The running workout has been cancelled.",
                 call.message.id)
@@ -226,7 +221,6 @@ def handle_callback_query(call):
 # handle /start command
 @BOT.message_handler(commands=["start"])
 def initialize(message):
-    global RESET_STATE
     global USER
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
@@ -235,7 +229,7 @@ def initialize(message):
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not RESET_STATE:
+    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -267,7 +261,7 @@ def begin_workout(message):
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not RESET_STATE:
+    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -277,14 +271,12 @@ def begin_workout(message):
 
 @BOT.message_handler(commands=["create"])
 def create_workout(message):
-    global \
-        RESET_STATE
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not RESET_STATE:
+    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -362,14 +354,12 @@ def finish(message):
 # handle clear request
 @BOT.message_handler(commands=["clear"])
 def clear_dialog(message):
-    global \
-        RESET_STATE
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not RESET_STATE:
+    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -401,14 +391,13 @@ def clear_dialog(message):
 @BOT.message_handler(commands=["delete"])
 def handle_delete_workout(message):
     global \
-        RESET_STATE, \
         USER
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not RESET_STATE:
+    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -426,13 +415,12 @@ def handle_delete_workout(message):
 
 @BOT.message_handler(commands=["view"])
 def view_workout(message):
-    global RESET_STATE
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not RESET_STATE:
+    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -444,12 +432,11 @@ def view_workout(message):
 
 @BOT.message_handler(commands=["feedback"])
 def user_feedback(message):
-    global RESET_STATE
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
     workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not RESET_STATE:
+    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -461,13 +448,12 @@ def user_feedback(message):
 
 @BOT.message_handler(commands=["stats", "publish"])
 def feature_in_progress(message):
-    global RESET_STATE
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     remove_inline_replies()
 
     workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not RESET_STATE:
+    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
         confirm_reset_state()
         return
 
