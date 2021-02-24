@@ -48,10 +48,10 @@ workout-related data:
 exercise-related data:
     CURRENT_EXERCISE_INDEX
     CUSTOM_EXERCISE
+    CATALOGUE_EXERCISE
 """
 
 global \
-    CATALOGUE_EXERCISE, \
     MOST_RECENTLY_ADDED_EXERCISE, \
     EXERCISE_PATH, \
     RESET_STATE
@@ -67,7 +67,6 @@ def confirm_reset_state():
 def reset_state():
     # reset the global state
     global \
-        CATALOGUE_EXERCISE, \
         MOST_RECENTLY_ADDED_EXERCISE, \
         EXERCISE_PATH, \
         RESET_STATE
@@ -86,7 +85,7 @@ def reset_state():
 
     set_to_redis("CURRENT_EXERCISE_INDEX", 0)
     set_to_redis("CUSTOM_EXERCISE", "None")
-    CATALOGUE_EXERCISE = None
+    set_to_redis("CATALOGUE_EXERCISE", "None")
     MOST_RECENTLY_ADDED_EXERCISE = None
 
     EXERCISE_PATH = []
@@ -104,8 +103,7 @@ def handle_callback_query(call):
     global \
         RESET_STATE, \
         USER, \
-        EXERCISE_PATH, \
-        CATALOGUE_EXERCISE
+        EXERCISE_PATH
 
     if not call.data == "add_catalogue_exercise":
         BOT.answer_callback_query(callback_query_id=call.id)  # remove loading spinner
@@ -126,8 +124,8 @@ def handle_callback_query(call):
         add_custom_exercise(call=call)
 
     elif call.data == "add_catalogue_exercise":
-        CATALOGUE_EXERCISE['id'] = str(uuid4())
-        add_catalogue_exercise(call, CATALOGUE_EXERCISE)
+        catalogue_exercise = get_from_redis("CATALOGUE_EXERCISE")
+        add_catalogue_exercise(call, catalogue_exercise)
 
     elif call.data == "explore_community":
         handle_explore_community()
@@ -778,7 +776,6 @@ def choose_exercise_from_catalogue(call, path=None):
     dictionary to enter
     :return:
     """
-    global CATALOGUE_EXERCISE
 
     with open("exercises.json", "r") as f:
         exercise_data = json.loads(f.read())
@@ -789,8 +786,9 @@ def choose_exercise_from_catalogue(call, path=None):
     if path:
         if len(path) == 3:
             # user has clicked on an exercise. Show exercise details
-            CATALOGUE_EXERCISE = exercise_data.get(path[0]).get(path[1]).get(path[2])
-            message_text = stringify_exercise(CATALOGUE_EXERCISE)
+            catalogue_exercise = exercise_data.get(path[0]).get(path[1]).get(path[2])
+            set_to_redis("CATALOGUE_EXERCISE", catalogue_exercise)
+            message_text = stringify_exercise(catalogue_exercise)
             send_edited_message(
                 message_text,
                 call.message.id,
@@ -834,6 +832,8 @@ def add_catalogue_exercise(call, catalogue_exercise):
 
     workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
     workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
+    catalogue_exercise["id"] = str(uuid4())
+    set_to_redis("CATALOGUE_EXERCISE", catalogue_exercise)
     USER = add_exercise_to_database(USER, catalogue_exercise, workout_index)
 
     # the most recently added exercise was this one, so update the global variable
