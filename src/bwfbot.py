@@ -2,8 +2,6 @@ import yaml
 import json
 import time
 import telebot
-import redis
-import jsonpickle
 
 from firebase_admin import \
     credentials, \
@@ -11,6 +9,8 @@ from firebase_admin import \
 
 from markups import *
 from database import *
+from redis_client import *
+from utils import *
 
 from uuid import uuid4
 
@@ -21,8 +21,6 @@ with open("../config.yml", "r") as fp:
 CRED = credentials.Certificate("../firebase_service_account_key_SECRET.json")
 initialize_app(CRED, {"databaseURL": config.get("firebase").get("reference")})
 
-CONN = redis.Redis(decode_responses=True)
-
 TOKEN = config.get("telegram").get("token")
 BOT = telebot.TeleBot(TOKEN)
 
@@ -31,6 +29,8 @@ global variables stored in REDIS:
 session:
     MESSAGE
     CHAT_ID
+    SENT_MESSAGES
+    USER
 input state:
     WAITING_FOR_INPUT
     WAITING_FOR_WORKOUT_TITLE
@@ -989,37 +989,6 @@ def show_workout_details(call, workout_id):
         reply_markup=return_to_view_workout_details_markup())
 
 
-def stringify_workout(workout):
-    workout = workout.get(list(workout.keys())[0])
-    result_string = f"*{prepare_for_markdown_v2(workout.get('title').title())}*\n\n"
-    if workout.get('exercises'):
-        result_string += "_Exercises:_\n\n"
-        for node_id in workout.get('exercises'):
-            result_string += stringify_exercise(workout.get('exercises').get(node_id)) + "\n"
-
-    return result_string
-
-
-def stringify_exercise(exercise):
-    result_string = f"*{prepare_for_markdown_v2(exercise.get('name').title())}*\n"
-    if exercise.get('video_link'):
-        result_string += f"[Video demonstration]({exercise.get('video_link')})\n"
-    if exercise.get('muscles_worked'):
-        result_string += "_muscles worked_:\n"
-        for muscle in exercise.get('muscles_worked'):
-            result_string += "• " + prepare_for_markdown_v2(muscle) + "\n"
-
-    return result_string
-
-
-def prepare_for_markdown_v2(string):
-    special_characters = ["_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"]
-    for character in special_characters:
-        string = string.replace(character, f"\\{character}")
-
-    return string
-
-
 def remove_inline_replies():
     # since user interaction has proceeded, remove any previous inline reply markups.
     if exists_in_redis("SENT_MESSAGES"):
@@ -1060,79 +1029,4 @@ def handle_user_feedback(message=None):
         delete_from_redis("WAITING_FOR_INPUT", "WAITING_FOR_USER_FEEDBACK")
 
 
-def get_digit_as_word(index):
-    digits = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eight", "ninth"]
-    if index < 9:
-        return f"{digits[index]}"
-    else:
-        return f"{index}th"
-
-
-def exists_in_redis(key):
-    return bool(CONN.exists(key))
-
-
-def get_from_redis(key):
-
-    if CONN.type(key) == "list":
-        return CONN.lrange(key, 0, -1)
-
-    retrieved_key = CONN.get(key)
-
-    if retrieved_key in ("True", "False"):
-        return retrieved_key == "True"
-
-    if retrieved_key == "None" or retrieved_key is None:
-        return None
-
-    if retrieved_key.isnumeric():
-        return int(retrieved_key)
-
-    if retrieved_key.startswith("{") and retrieved_key.endswith("}"):
-        return jsonpickle.loads(retrieved_key)
-
-    return retrieved_key
-
-
-def delete_from_redis(*args):
-    CONN.delete(*args)
-
-
-def set_to_redis(key, value):
-    if type(value) == dict:
-        value = jsonpickle.dumps(value)
-
-    elif type(value) == bool:
-        value = str(value)
-
-    elif value is None:
-        value = "None"
-
-    CONN.set(key, value)
-
-
-def push_to_redis(key, value):
-    CONN.rpush(key, value)
-
-
-def set_list_index_to_redis(key, index, value):
-    CONN.lset(key, index, value)
-
-
-def pop_from_redis(key, pop_type):
-    if pop_type == "left":
-        CONN.lpop(key)
-    if pop_type == "right":
-        CONN.rpop(key)
-
-
-def increment_in_redis(key):
-    CONN.incr(key)
-
-
-def decrement_in_redis(key):
-    CONN.decr(key)
-
-
-if __name__ == "__main__":
-    BOT.polling()
+BOT.polling()
