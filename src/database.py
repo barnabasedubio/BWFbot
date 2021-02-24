@@ -54,7 +54,7 @@ def get_saved_workout_from_database(user_id, workout_id):
     return workout
 
 
-def add_workout_to_database(user_id, workout):
+def add_saved_workout_to_database(user_id, workout):
     user_node_id = get_user_node_key_from_database(user_id)
     DB.reference(f"/users/{user_node_id}/saved_workouts").push(workout)
     # return updated user
@@ -66,6 +66,16 @@ def delete_saved_workout_from_database(user_id, workout_key):
     DB.reference(f"/users/{user_node_id}/saved_workouts/{workout_key}").delete()
     # return updated user
     return get_user_from_database(user_id)
+
+
+def update_saved_workout_in_database(user_id, workout_key, payload):
+    user_node_id = get_user_node_key_from_database(user_id)
+    DB.reference(f"/users/{user_node_id}/saved_workouts/{workout_key}").update(payload)
+    return get_user_from_database(user_id)
+
+
+def publish_saved_workout(workout):
+    DB.reference("/published_workouts").push(workout)
 
 
 def add_exercise_to_database(user, exercise, workout_index):

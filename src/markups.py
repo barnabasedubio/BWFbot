@@ -85,6 +85,24 @@ def view_workout_details_markup(workouts):
     return markup
 
 
+def publish_workout_markup(workouts):
+    markup = InlineKeyboardMarkup()
+    for node_id in workouts:
+        workout = workouts[node_id]
+        markup.add(InlineKeyboardButton(workout['title'], callback_data=f"PUBLISH_WORKOUT:{workout['id']}"))
+    markup.add(InlineKeyboardButton("↩️ Go back", callback_data="start_menu"))
+    return markup
+
+
+def confirm_publish_workout_markup(workout_id):
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton("✅ Yes", callback_data=f"CONFIRM_PUBLISH_WORKOUT:{workout_id}"),
+        InlineKeyboardButton("❌ No", callback_data=f"ABORT_PUBLISH_WORKOUT:{workout_id}")
+    )
+    return markup
+
+
 def return_to_view_workout_details_markup():
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("↩️ Go back", callback_data="list_workouts_for_workout_details"))

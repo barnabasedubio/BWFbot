@@ -83,7 +83,8 @@ def reset_state():
         "MOST_RECENTLY_ADDED_EXERCISE",
         "EXERCISE_PATH",
         "RESET_STATE",
-        "CURRENT_EXERCISE_INDEX"
+        "CURRENT_EXERCISE_INDEX",
+        "PUBLISH_WORKOUT_ID"
     )
 
 
@@ -106,9 +107,9 @@ def handle_callback_query(call):
     """
     global UID
     UID = str(call.from_user.id)
-    print(UID)
 
-    if not call.data == "add_catalogue_exercise":
+    if not call.data == "add_catalogue_exercise" and \
+            "CONFIRM_PUBLISH_WORKOUT:" not in call.data:
         BOT.answer_callback_query(callback_query_id=call.id)  # remove loading spinner
 
     if call.data == "choose_workouts":
@@ -192,9 +193,11 @@ def handle_callback_query(call):
             do_workout(workout_id=workout_id)
         else:
             send_edited_message(
-                f"{temp_workout.get('title')} has no exercises. Do you want to add some?",
+                f"*{prepare_for_markdown_v2(temp_workout.get('title'))}* has no exercises\\. Do you want to add some?",
                 call.message.id,
-                reply_markup=add_exercise_markup(comes_from="start_menu"))
+                reply_markup=add_exercise_markup(comes_from="start_menu"),
+                parse_mode="MarkdownV2"
+            )
 
     elif call.data.startswith("DELETE_WORKOUT:"):
         workout_id = call.data.replace("DELETE_WORKOUT:", "")
@@ -209,19 +212,39 @@ def handle_callback_query(call):
 
         user = delete_saved_workout_from_database(user.get("id"), workout_key)
         set_to_redis(UID, "USER", user)
-        send_edited_message(f"Done! {workout_title} is gone from your saved workouts.", call.message.id)
+        send_edited_message(
+            f"Done\\! *{prepare_for_markdown_v2(workout_title)}* is gone from your saved workouts\\.",
+            call.message.id,
+            parse_mode="MarkdownV2"
+        )
 
     elif call.data.startswith("ABORT_DELETE_WORKOUT:"):
-        user = get_from_redis(UID, "USER")
         workout_id = call.data.replace("ABORT_DELETE_WORKOUT:", "")
-        workout = get_saved_workout_from_database(user.get("id"), workout_id)
-        workout_key = list(workout.keys())[0]
-        workout_title = workout.get(workout_key).get("title")
+        workout = get_saved_workout_from_user(workout_id)
+        workout_title = prepare_for_markdown_v2(workout.get('title'))
         send_edited_message(f"Gotcha! Will not delete {workout_title}.", call.message.id)
 
     elif call.data.startswith("VIEW_WORKOUT:"):
         workout_id = call.data.replace("VIEW_WORKOUT:", "")
         show_workout_details(call, workout_id)
+
+    elif call.data.startswith("PUBLISH_WORKOUT:"):
+        workout_id = call.data.replace("PUBLISH_WORKOUT:", "")
+        publish_workout(call, workout_id, False)
+
+    elif call.data.startswith("CONFIRM_PUBLISH_WORKOUT:"):
+        workout_id = call.data.replace("CONFIRM_PUBLISH_WORKOUT:", "")
+        publish_workout(call, workout_id, True)
+
+    elif call.data.startswith("ABORT_PUBLISH_WORKOUT:"):
+        workout_id = call.data.replace("ABORT_PUBLISH_WORKOUT:", "")
+        workout = get_saved_workout_from_user(workout_id)
+        workout_title = prepare_for_markdown_v2(workout.get('title'))
+        send_edited_message(
+            f"Alright, I'll not publish *{workout_title}*\\.",
+            call.message.id,
+            parse_mode="MarkdownV2"
+        )
 
     elif call.data.startswith("RESET_STATE:"):
         answer = call.data.replace("RESET_STATE:", "")
@@ -409,7 +432,28 @@ def user_feedback(message):
     handle_user_feedback()
 
 
-@BOT.message_handler(commands=["stats", "publish"])
+@BOT.message_handler(commands=["publish"])
+def handle_publish_workout(message):
+    remove_inline_replies()
+
+    workout = get_from_redis(UID, "WORKOUT")
+    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
+        confirm_reset_state()
+        return
+
+    # reset application state for every new session
+    reset_state()
+
+    user = get_from_redis(UID, "USER")
+    if user.get('saved_workouts'):
+        send_message(
+            "Which of your workouts would you like to share with the community?",
+            reply_markup=publish_workout_markup(user.get('saved_workouts')))
+    else:
+        send_message("You don't have any stored workouts. Please create one first before publishing.")
+
+
+@BOT.message_handler(commands=["stats"])
 def feature_in_progress(message):
     remove_inline_replies()
 
@@ -422,8 +466,8 @@ def feature_in_progress(message):
     reset_state()
 
     send_message(
-        "This feature is currently still getting developed. "
-        "In the meantime, please send me some /feedback as to what you would like to see!")
+        "Please bear with me, I am currently still working on this feature. 😅"
+        "\n\nIn the meantime, please send me some /feedback as to what you would like to see once it's done!")
 
 
 # only if bot is expecting user input
@@ -610,7 +654,7 @@ def set_workout(message):
 
     # append new workout to user's list of saved workouts
     user = get_from_redis(UID, "USER")
-    user = add_workout_to_database(user.get("id"), new_workout)
+    user = add_saved_workout_to_database(user.get("id"), new_workout)
     set_to_redis(UID, "USER", user)
 
     message_text = \
@@ -830,8 +874,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     if not get_from_redis(UID, "WORKOUT"):
         user = get_from_redis(UID, "USER")
         # only happens once (when the workout gets started initially)
-        new_workout = get_saved_workout_from_database(user.get("id"), workout_id)
-        new_workout = new_workout.get(list(new_workout.keys())[0])
+        new_workout = get_saved_workout_from_user(workout_id)
         # give the new workout a new id
         new_workout['id'] = str(uuid4())
         new_workout['template_id'] = workout_id
@@ -976,8 +1019,7 @@ def workout_completed():
 
 def delete_workout(call, workout_id):
 
-    user = get_from_redis(UID, "USER")
-    workout_title = list(get_saved_workout_from_database(user.get("id"), workout_id).values())[0].get('title')
+    workout_title = get_saved_workout_from_user(workout_id).get('title')
     send_edited_message(
         f"Are you sure you want to delete {workout_title}?",
         call.message.id, reply_markup=delete_workout_confirmation_markup(workout_id))
@@ -1002,8 +1044,7 @@ def handle_view_workout(call=None):
 
 def show_workout_details(call, workout_id):
 
-    user = get_from_redis(UID, "USER")
-    workout = get_saved_workout_from_database(user.get("id"), workout_id)
+    workout = get_saved_workout_from_user(workout_id)
 
     send_edited_message(
         stringify_workout(workout),
@@ -1025,6 +1066,51 @@ def remove_inline_replies():
 def handle_community_request(call):
     message_text = "Would you like to explore workouts created by the bodyweight fitness community?"
     send_edited_message(message_text, call.message.id, reply_markup=explore_community_workouts_answer_markup())
+
+
+def publish_workout(call, workout_id, confirmed):
+    global UID
+
+    workout = get_saved_workout_from_user(workout_id)
+
+    if not confirmed:
+        message_text = f"Are you sure you want to publish *{prepare_for_markdown_v2(workout.get('title'))}*?"
+        send_edited_message(
+            message_text,
+            call.message.id,
+            reply_markup=confirm_publish_workout_markup(workout_id),
+            parse_mode="MarkdownV2"
+        )
+
+    else:
+        workout = get_saved_workout_from_database(UID, workout_id)
+        workout_key = list(workout.keys())[0]
+
+        user = update_saved_workout_in_database(UID, workout_key, {
+            "published": True,
+            "published_at": int(time.time())
+        })
+
+        set_to_redis(UID, "USER", user)
+        workout = get_saved_workout_from_user(workout_id)
+        publish_saved_workout(workout)
+
+        BOT.answer_callback_query(call.id)
+        send_edited_message(
+            f"Great\\! Thank you for publishing *{prepare_for_markdown_v2(workout.get('title'))}*\\. 😊",
+            call.message.id,
+            reply_markup=start_options_markup(),
+            parse_mode="MarkdownV2"
+        )
+
+
+def get_saved_workout_from_user(workout_id):
+    global UID
+    user = get_from_redis(UID, "USER")
+    if user.get("saved_workouts"):
+        for workout_node in list(user.get("saved_workouts").keys()):
+            if user.get("saved_workouts").get(workout_node).get("id") == workout_id:
+                return user.get("saved_workouts").get(workout_node)
 
 
 def handle_explore_community():

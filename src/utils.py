@@ -1,7 +1,6 @@
 # this file contains state agnostic QoL functions
 
 def stringify_workout(workout):
-    workout = workout.get(list(workout.keys())[0])
     result_string = f"*{prepare_for_markdown_v2(workout.get('title').title())}*\n\n"
     if workout.get('exercises'):
         result_string += "_Exercises:_\n\n"
