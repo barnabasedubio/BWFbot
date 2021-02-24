@@ -45,14 +45,14 @@ workout-related data:
     WORKOUT
     WORKOUT_INDEX
     PAST_WORKOUT_DATA
-
+exercise-related data:
+    CURRENT_EXERCISE_INDEX
 """
 
 global \
     CUSTOM_EXERCISE, \
     CATALOGUE_EXERCISE, \
     MOST_RECENTLY_ADDED_EXERCISE, \
-    CURRENT_EXERCISE_INDEX, \
     EXERCISE_PATH, \
     RESET_STATE
 
@@ -70,7 +70,6 @@ def reset_state():
         CUSTOM_EXERCISE, \
         CATALOGUE_EXERCISE, \
         MOST_RECENTLY_ADDED_EXERCISE, \
-        CURRENT_EXERCISE_INDEX, \
         EXERCISE_PATH, \
         RESET_STATE
 
@@ -89,8 +88,7 @@ def reset_state():
     CUSTOM_EXERCISE = None
     CATALOGUE_EXERCISE = None
     MOST_RECENTLY_ADDED_EXERCISE = None
-
-    CURRENT_EXERCISE_INDEX = 0
+    set_to_redis("CURRENT_EXERCISE_INDEX", 0)
 
     EXERCISE_PATH = []
 
@@ -313,8 +311,6 @@ def proceed_to_next(message):
     can be handled fairly straightforwardly
     :param message
     """
-    global \
-        CURRENT_EXERCISE_INDEX
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
@@ -327,23 +323,21 @@ def proceed_to_next(message):
         add_custom_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED", skip_setting=True)
 
     elif get_from_redis("WAITING_FOR_REP_COUNT") and \
-            CURRENT_EXERCISE_INDEX != len(get_from_redis("WORKOUT").get('exercises')) - 1:
+            get_from_redis("CURRENT_EXERCISE_INDEX") != len(get_from_redis("WORKOUT").get('exercises')) - 1:
         # display the next exercise in the workout to the user
         # if the user is on their last exercise, this logic is handled by the /finish handler instead
-        CURRENT_EXERCISE_INDEX += 1
+        increment_in_redis("CURRENT_EXERCISE_INDEX")
         do_workout()
 
 
 # handle /previous command
 @BOT.message_handler(commands=["previous"])
 def return_to_previous(message):
-    global \
-        CURRENT_EXERCISE_INDEX
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
 
-    if get_from_redis("WAITING_FOR_REP_COUNT") and CURRENT_EXERCISE_INDEX > 0:
-        CURRENT_EXERCISE_INDEX -= 1
+    if get_from_redis("WAITING_FOR_REP_COUNT") and get_from_redis("CURRENT_EXERCISE_INDEX") > 0:
+        decrement_in_redis("CURRENT_EXERCISE_INDEX")
         do_workout()
 
 
@@ -351,12 +345,12 @@ def return_to_previous(message):
 @BOT.message_handler(commands=["finish"])
 def finish(message):
     global \
-        CURRENT_EXERCISE_INDEX, \
         USER
 
     push_to_redis("MESSAGES", jsonpickle.dumps(message))
     workout = get_from_redis("WORKOUT")
-    if get_from_redis("WAITING_FOR_REP_COUNT") and CURRENT_EXERCISE_INDEX == len(workout.get('exercises')) - 1:
+    if get_from_redis("WAITING_FOR_REP_COUNT") and \
+            get_from_redis("CURRENT_EXERCISE_INDEX") == len(workout.get('exercises')) - 1:
         # user is done with their workout. End workout and add it to their completed workouts
         workout['duration'] = int(time.time()) - workout.get('started_at')
         workout['running'] = False
@@ -365,7 +359,7 @@ def finish(message):
         USER = add_completed_workout_to_database(USER.get("id"), workout)
 
         # reset exercise index
-        CURRENT_EXERCISE_INDEX = 0  # reset
+        set_to_redis("CURRENT_EXERCISE_INDEX", 0)  # reset
         # deactivate user input handling
         set_to_redis("WAITING_FOR_REP_COUNT", False)
         set_to_redis("WAITING_FOR_INPUT", False)
@@ -893,7 +887,6 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     :return:
     """
     global \
-        CURRENT_EXERCISE_INDEX, \
         USER
 
     if not get_from_redis("WORKOUT"):
@@ -911,7 +904,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
 
     # create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
     exercise_node_ids = list(get_from_redis("WORKOUT").get('exercises'))
-    current_exercise_node_id = exercise_node_ids[CURRENT_EXERCISE_INDEX]
+    current_exercise_node_id = exercise_node_ids[get_from_redis("CURRENT_EXERCISE_INDEX")]
     workout = get_from_redis("WORKOUT")
     current_exercise = workout.get('exercises').get(current_exercise_node_id)
 
@@ -938,7 +931,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
 
         send_message(
             message_text,
-            reply_markup=number_pad_markup(CURRENT_EXERCISE_INDEX != 0, about_to_finish),
+            reply_markup=number_pad_markup(get_from_redis("CURRENT_EXERCISE_INDEX") != 0, about_to_finish),
             parse_mode="MarkdownV2")
 
         # view exercise details (such as the rolling average and other stats)
@@ -961,15 +954,14 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
 
 
 def show_exercise_stats(call):
-    global \
-        CURRENT_EXERCISE_INDEX
 
     exercise_performance_history = []  # e.g: user's past performance on dips: [[8, 8, 7, 6] , [7, 7, 6, 7] , [9, 8, 9]]
     message_text = ""
 
     past_workout_data = get_from_redis("PAST_WORKOUT_DATA")
     for workout_node_id in past_workout_data:
-        current_exercise_node_id = list(past_workout_data.get(workout_node_id).get('exercises'))[CURRENT_EXERCISE_INDEX]
+        current_exercise_node_id = \
+            list(past_workout_data.get(workout_node_id).get('exercises'))[get_from_redis("CURRENT_EXERCISE_INDEX")]
         current_exercise = past_workout_data.get(workout_node_id).get('exercises').get(current_exercise_node_id)
         exercise_performance_history.append(current_exercise.get('reps') or [])
 
@@ -1203,6 +1195,14 @@ def set_list_index_to_redis(key, index, value):
 
 def pop_from_redis(key):
     CONN.lpop(key)
+
+
+def increment_in_redis(key):
+    CONN.incr(key)
+
+
+def decrement_in_redis(key):
+    CONN.decr(key)
 
 
 if __name__ == "__main__":
