@@ -7,12 +7,15 @@ import jsonpickle
 CONN = redis.Redis(decode_responses=True)
 
 
-def exists_in_redis(key):
+# --------- BASIC OPERATIONS ---------
+
+def exists_in_redis(uid, key):
+    key = f"{uid}_{key}"
     return bool(CONN.exists(key))
 
 
-def get_from_redis(key):
-
+def get_from_redis(uid, key):
+    key = f"{uid}_{key}"
     if CONN.type(key) == "list":
         return CONN.lrange(key, 0, -1)
 
@@ -33,11 +36,13 @@ def get_from_redis(key):
     return retrieved_key
 
 
-def delete_from_redis(*args):
-    CONN.delete(*args)
+def delete_from_redis(uid, *args):
+    new_args = [f"{uid}_{arg}" for arg in args]
+    CONN.delete(*new_args)
 
 
-def set_to_redis(key, value):
+def set_to_redis(uid, key, value):
+    key = f"{uid}_{key}"
     if type(value) == dict:
         value = jsonpickle.dumps(value)
 
@@ -50,24 +55,33 @@ def set_to_redis(key, value):
     CONN.set(key, value)
 
 
-def push_to_redis(key, value):
+# --------- LIST OPERATIONS ---------
+
+def push_to_redis(uid, key, value):
+    key = f"{uid}_{key}"
     CONN.rpush(key, value)
 
 
-def set_list_index_to_redis(key, index, value):
-    CONN.lset(key, index, value)
-
-
-def pop_from_redis(key, pop_type):
+def pop_from_redis(uid, key, pop_type):
+    key = f"{uid}_{key}"
     if pop_type == "left":
         CONN.lpop(key)
     if pop_type == "right":
         CONN.rpop(key)
 
 
-def increment_in_redis(key):
+def set_list_index_to_redis(uid, key, index, value):
+    key = f"{uid}_{key}"
+    CONN.lset(key, index, value)
+
+
+# --------- ARITHMETIC OPERATIONS ---------
+
+def increment_in_redis(uid, key):
+    key = f"{uid}_{key}"
     CONN.incr(key)
 
 
-def decrement_in_redis(key):
+def decrement_in_redis(uid, key):
+    key = f"{uid}_{key}"
     CONN.decr(key)

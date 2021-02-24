@@ -3,6 +3,7 @@ import json
 import time
 import telebot
 
+from telebot import apihelper
 from firebase_admin import \
     credentials, \
     initialize_app
@@ -20,6 +21,8 @@ with open("../config.yml", "r") as fp:
 
 CRED = credentials.Certificate("../firebase_service_account_key_SECRET.json")
 initialize_app(CRED, {"databaseURL": config.get("firebase").get("reference")})
+
+apihelper.ENABLE_MIDDLEWARE = True
 
 TOKEN = config.get("telegram").get("token")
 BOT = telebot.TeleBot(TOKEN)
@@ -61,7 +64,10 @@ def confirm_reset_state():
 
 
 def reset_state():
+    global UID
+
     delete_from_redis(
+        UID,
         "WAITING_FOR_INPUT",
         "WAITING_FOR_WORKOUT_TITLE",
         "WAITING_FOR_EXERCISE_NAME",
@@ -81,13 +87,26 @@ def reset_state():
     )
 
 
+global UID
+
+
 # ----------------- HANDLERS --------------------
+
+@BOT.middleware_handler(update_types=["message"])
+def set_user_id(bot_instance, message):
+    global UID
+    UID = str(message.from_user.id)
+
+
 @BOT.callback_query_handler(func=lambda call: True)
 def handle_callback_query(call):
     """
     handles all inline keyboard responses
     :param call
     """
+    global UID
+    UID = str(call.from_user.id)
+    print(UID)
 
     if not call.data == "add_catalogue_exercise":
         BOT.answer_callback_query(callback_query_id=call.id)  # remove loading spinner
@@ -108,7 +127,7 @@ def handle_callback_query(call):
         add_custom_exercise(call=call)
 
     elif call.data == "add_catalogue_exercise":
-        catalogue_exercise = get_from_redis("CATALOGUE_EXERCISE")
+        catalogue_exercise = get_from_redis(UID, "CATALOGUE_EXERCISE")
         add_catalogue_exercise(call, catalogue_exercise)
 
     elif call.data == "explore_community":
@@ -138,35 +157,35 @@ def handle_callback_query(call):
     elif call.data.startswith("choose_exercise_from_catalogue:"):
         call.data = call.data.replace("choose_exercise_from_catalogue:", "")
         if call.data == "go_back":
-            if get_from_redis("EXERCISE_PATH"):
-                pop_from_redis("EXERCISE_PATH", "right")
+            if get_from_redis(UID, "EXERCISE_PATH"):
+                pop_from_redis(UID, "EXERCISE_PATH", "right")
             else:
                 # user already was in root level (movement groups) when they clicked go back
                 add_exercise_options(call)
                 return
         else:
-            push_to_redis("EXERCISE_PATH", call.data)
-        choose_exercise_from_catalogue(call, get_from_redis("EXERCISE_PATH"))
+            push_to_redis(UID, "EXERCISE_PATH", call.data)
+        choose_exercise_from_catalogue(call, get_from_redis(UID, "EXERCISE_PATH"))
 
     elif call.data.startswith("START_WORKOUT:"):
         workout_id = call.data.replace("START_WORKOUT:", "")
         temp_workout = {}
         counter = 0
         # get workout data from users saved workouts
-        user = get_from_redis("USER")
+        user = get_from_redis(UID, "USER")
         for node_id in user.get('saved_workouts'):
             if user.get('saved_workouts').get(node_id).get('id') == workout_id:
                 temp_workout = user.get('saved_workouts').get(node_id)
                 break
             counter += 1
-        set_to_redis("WORKOUT_INDEX", counter)
+        set_to_redis(UID, "WORKOUT_INDEX", counter)
 
         if user.get('completed_workouts'):
             # get previous workout data from user's completed workouts that use the saved workout as a template
             past_workout_data = {node: workout
                                  for (node, workout) in user.get('completed_workouts').items()
                                  if user.get('completed_workouts').get(node).get('template_id') == workout_id}
-            set_to_redis("PAST_WORKOUT_DATA", past_workout_data)
+            set_to_redis(UID, "PAST_WORKOUT_DATA", past_workout_data)
 
         if temp_workout.get('exercises'):
             send_edited_message("Let's go! 💪", call.message.id)
@@ -182,18 +201,18 @@ def handle_callback_query(call):
         delete_workout(call=call, workout_id=workout_id)
 
     elif call.data.startswith("CONFIRM_DELETE_WORKOUT:"):
-        user = get_from_redis("USER")
+        user = get_from_redis(UID, "USER")
         workout_id = call.data.replace("CONFIRM_DELETE_WORKOUT:", "")
         workout = get_saved_workout_from_database(user.get("id"), workout_id)
         workout_key = list(workout.keys())[0]
         workout_title = workout.get(workout_key).get("title")
 
         user = delete_saved_workout_from_database(user.get("id"), workout_key)
-        set_to_redis("USER", user)
+        set_to_redis(UID, "USER", user)
         send_edited_message(f"Done! {workout_title} is gone from your saved workouts.", call.message.id)
 
     elif call.data.startswith("ABORT_DELETE_WORKOUT:"):
-        user = get_from_redis("USER")
+        user = get_from_redis(UID, "USER")
         workout_id = call.data.replace("ABORT_DELETE_WORKOUT:", "")
         workout = get_saved_workout_from_database(user.get("id"), workout_id)
         workout_key = list(workout.keys())[0]
@@ -208,26 +227,26 @@ def handle_callback_query(call):
         answer = call.data.replace("RESET_STATE:", "")
         reset_state_flag = True if answer == "YES" else False
         if reset_state_flag:
-            set_to_redis("RESET_STATE", True)
+            set_to_redis(UID, "RESET_STATE", True)
             send_edited_message(
                 "Done! The running workout has been cancelled.",
                 call.message.id)
             send_message("Please resend your command.", reply_markup=telebot.types.ReplyKeyboardRemove())
         else:
             send_edited_message("Okay, I'll not cancel the running workout.", call.message.id)
-            delete_from_redis("RESET_STATE")
+            delete_from_redis(UID, "RESET_STATE")
 
 
 # handle /start command
 @BOT.message_handler(commands=["start"])
 def initialize(message):
 
-    set_to_redis("CHAT_ID", str(message.chat.id))
+    set_to_redis(UID, "CHAT_ID", str(message.chat.id))
 
     remove_inline_replies()
 
-    workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
+    workout = get_from_redis(UID, "WORKOUT")
+    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -235,13 +254,13 @@ def initialize(message):
     reset_state()
 
     user_id = str(message.from_user.id)
-    user = get_from_redis("USER")
+    user = get_from_redis(UID, "USER")
     if bool(user):
         show_start_options(username=user.get('first_name'))
 
     else:
         user = get_user_from_database(user_id)
-        set_to_redis("USER", user)
+        set_to_redis(UID, "USER", user)
         if not user:
             # new user
             new_user = add_user_to_database(
@@ -249,9 +268,9 @@ def initialize(message):
                 message.from_user.first_name,
                 message.from_user.last_name,
                 message.from_user.username)
-            set_to_redis("USER", new_user)
+            set_to_redis(UID, "USER", new_user)
 
-        user = get_from_redis("USER")
+        user = get_from_redis(UID, "USER")
         show_start_options(username=user.get('first_name'))
 
 
@@ -260,8 +279,8 @@ def begin_workout(message):
 
     remove_inline_replies()
 
-    workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
+    workout = get_from_redis(UID, "WORKOUT")
+    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -274,8 +293,8 @@ def create_workout(message):
 
     remove_inline_replies()
 
-    workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
+    workout = get_from_redis(UID, "WORKOUT")
+    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -294,48 +313,50 @@ def proceed_to_next(message):
     can be handled fairly straightforwardly
     :param message
     """
+    global UID
 
-    if get_from_redis("WAITING_FOR_EXERCISE_VIDEO_LINK"):
+    if get_from_redis(UID, "WAITING_FOR_EXERCISE_VIDEO_LINK"):
         # user skipped the video link entry
         add_custom_exercise(message=message, message_type="EXERCISE_VIDEO_LINK", skip_setting=True)
 
-    elif get_from_redis("WAITING_FOR_MUSCLES_WORKED"):
+    elif get_from_redis(UID, "WAITING_FOR_MUSCLES_WORKED"):
         # user skipped the muscles worked entry
         add_custom_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED", skip_setting=True)
 
-    elif get_from_redis("WAITING_FOR_REP_COUNT") and \
-            get_from_redis("CURRENT_EXERCISE_INDEX") != len(get_from_redis("WORKOUT").get('exercises')) - 1:
+    elif get_from_redis(UID, "WAITING_FOR_REP_COUNT") and \
+            get_from_redis(UID, "CURRENT_EXERCISE_INDEX") != len(get_from_redis(UID, "WORKOUT").get('exercises')) - 1:
         # display the next exercise in the workout to the user
         # if the user is on their last exercise, this logic is handled by the /finish handler instead
-        increment_in_redis("CURRENT_EXERCISE_INDEX")
+        increment_in_redis(UID, "CURRENT_EXERCISE_INDEX")
         do_workout()
 
 
 # handle /previous command
 @BOT.message_handler(commands=["previous"])
 def return_to_previous(message):
-
-    if get_from_redis("WAITING_FOR_REP_COUNT") and get_from_redis("CURRENT_EXERCISE_INDEX") > 0:
-        decrement_in_redis("CURRENT_EXERCISE_INDEX")
+    global UID
+    if get_from_redis(UID, "WAITING_FOR_REP_COUNT") and get_from_redis(UID, "CURRENT_EXERCISE_INDEX") > 0:
+        decrement_in_redis(UID, "CURRENT_EXERCISE_INDEX")
         do_workout()
 
 
 # handle /finish command
 @BOT.message_handler(commands=["finish"])
 def finish(message):
-    workout = get_from_redis("WORKOUT")
-    if get_from_redis("WAITING_FOR_REP_COUNT") and \
-            get_from_redis("CURRENT_EXERCISE_INDEX") == len(workout.get('exercises')) - 1:
+    global UID
+    workout = get_from_redis(UID, "WORKOUT")
+    if get_from_redis(UID, "WAITING_FOR_REP_COUNT") and \
+            get_from_redis(UID, "CURRENT_EXERCISE_INDEX") == len(workout.get('exercises')) - 1:
         # user is done with their workout. End workout and add it to their completed workouts
         workout['duration'] = int(time.time()) - workout.get('started_at')
         workout['running'] = False
 
-        set_to_redis("WORKOUT", workout)
-        user = get_from_redis("USER")
+        set_to_redis(UID, "WORKOUT", workout)
+        user = get_from_redis(UID, "USER")
         user = add_completed_workout_to_database(user.get("id"), workout)
-        set_to_redis("USER", user)
+        set_to_redis(UID, "USER", user)
 
-        delete_from_redis("WAITING_FOR_INPUT", "WAITING_FOR_REP_COUNT", "CURRENT_EXERCISE_INDEX")
+        delete_from_redis(UID, "WAITING_FOR_INPUT", "WAITING_FOR_REP_COUNT", "CURRENT_EXERCISE_INDEX")
         workout_completed()
 
 
@@ -343,13 +364,13 @@ def finish(message):
 def handle_delete_workout(message):
     remove_inline_replies()
 
-    workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
+    workout = get_from_redis(UID, "WORKOUT")
+    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
         confirm_reset_state()
         return
 
     reset_state()
-    user = get_from_redis("USER")
+    user = get_from_redis(UID, "USER")
     if user.get('saved_workouts'):
         message_text = \
             "Which workout would you like to delete?\n\n" \
@@ -364,8 +385,8 @@ def handle_delete_workout(message):
 def view_workout(message):
     remove_inline_replies()
 
-    workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
+    workout = get_from_redis(UID, "WORKOUT")
+    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -377,8 +398,8 @@ def view_workout(message):
 
 @BOT.message_handler(commands=["feedback"])
 def user_feedback(message):
-    workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
+    workout = get_from_redis(UID, "WORKOUT")
+    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -392,8 +413,8 @@ def user_feedback(message):
 def feature_in_progress(message):
     remove_inline_replies()
 
-    workout = get_from_redis("WORKOUT")
-    if workout and workout.get('running') and not get_from_redis("RESET_STATE"):
+    workout = get_from_redis(UID, "WORKOUT")
+    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
         confirm_reset_state()
         return
 
@@ -416,22 +437,22 @@ def handle_user_input(message):
     """
 
     # only handle if the bot is also waiting for user input
-    if get_from_redis("WAITING_FOR_INPUT"):
+    if get_from_redis(UID, "WAITING_FOR_INPUT"):
         # create workout
-        if get_from_redis("WAITING_FOR_WORKOUT_TITLE"):
+        if get_from_redis(UID, "WAITING_FOR_WORKOUT_TITLE"):
             get_workout_title_from_input(message=message)
         # create exercise
-        elif get_from_redis("WAITING_FOR_EXERCISE_NAME"):
+        elif get_from_redis(UID, "WAITING_FOR_EXERCISE_NAME"):
             add_custom_exercise(message=message, message_type="EXERCISE_NAME")
-        elif get_from_redis("WAITING_FOR_EXERCISE_VIDEO_LINK"):
+        elif get_from_redis(UID, "WAITING_FOR_EXERCISE_VIDEO_LINK"):
             add_custom_exercise(message=message, message_type="EXERCISE_VIDEO_LINK")
-        elif get_from_redis("WAITING_FOR_MUSCLES_WORKED"):
+        elif get_from_redis(UID, "WAITING_FOR_MUSCLES_WORKED"):
             add_custom_exercise(message=message, message_type="EXERCISE_MUSCLES_WORKED")
         # add reps to exercise
-        elif get_from_redis("WAITING_FOR_REP_COUNT"):
+        elif get_from_redis(UID, "WAITING_FOR_REP_COUNT"):
             if message.text.isnumeric():
                 do_workout(True, message)
-        elif get_from_redis("WAITING_FOR_USER_FEEDBACK"):
+        elif get_from_redis(UID, "WAITING_FOR_USER_FEEDBACK"):
             handle_user_feedback(message)
 
 
@@ -453,28 +474,28 @@ def show_start_options(call=None, username="username"):
 
 
 def send_message(message_text, reply_markup=None, parse_mode=""):
-    global BOT
+    global BOT, UID
 
-    chat_id = get_from_redis("CHAT_ID")
+    chat_id = get_from_redis(UID, "CHAT_ID")
     sent_message = BOT.send_message(
         chat_id,
         message_text,
         reply_markup=reply_markup, disable_web_page_preview=True,
         parse_mode=parse_mode)
 
-    push_to_redis("SENT_MESSAGES", jsonpickle.dumps(sent_message))
+    push_to_redis(UID, "SENT_MESSAGES", jsonpickle.dumps(sent_message))
 
 
 def send_edited_message(message_text, previous_message_id, reply_markup=None, parse_mode=""):
-    global BOT
+    global BOT, UID
 
     message_to_edit = None
     message_index = None
-    chat_id = get_from_redis("CHAT_ID")
+    chat_id = get_from_redis(UID, "CHAT_ID")
 
     messages = \
-        [jsonpickle.loads(x) for x in get_from_redis("SENT_MESSAGES")] \
-        if exists_in_redis("SENT_MESSAGES") \
+        [jsonpickle.loads(x) for x in get_from_redis(UID, "SENT_MESSAGES")] \
+        if exists_in_redis(UID, "SENT_MESSAGES") \
         else []
 
     for ix, message in enumerate(messages):
@@ -491,12 +512,12 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
         disable_web_page_preview=True,
         parse_mode=parse_mode)
 
-    set_list_index_to_redis("SENT_MESSAGES", message_index, jsonpickle.dumps(new_message))
+    set_list_index_to_redis(UID, "SENT_MESSAGES", message_index, jsonpickle.dumps(new_message))
 
 
 def choose_workout(call=None, comes_from=None):
 
-    user = get_from_redis("USER")
+    user = get_from_redis(UID, "USER")
     if user.get('saved_workouts'):
         message_text = \
             "Which workout routine would you like to start?\n\n" \
@@ -544,6 +565,7 @@ def get_workout_title_from_input(call=None, message=None):
     :param message:
     :return:
     """
+    global UID
 
     if not message:
         message_text = '''*New workout*\n\nWhat would you like to name your workout?'''
@@ -559,13 +581,13 @@ def get_workout_title_from_input(call=None, message=None):
                 reply_markup=create_workout_go_back_markup(),
                 parse_mode="MarkdownV2")
 
-        set_to_redis("WAITING_FOR_INPUT", True)
-        set_to_redis("WAITING_FOR_WORKOUT_TITLE", True)
+        set_to_redis(UID, "WAITING_FOR_INPUT", True)
+        set_to_redis(UID, "WAITING_FOR_WORKOUT_TITLE", True)
 
     else:
         # received input, set global flags back to false
         remove_inline_replies()
-        delete_from_redis("WAITING_FOR_INPUT", "WAITING_FOR_WORKOUT_TITLE")
+        delete_from_redis(UID, "WAITING_FOR_INPUT", "WAITING_FOR_WORKOUT_TITLE")
         set_workout(message)
 
 
@@ -587,9 +609,9 @@ def set_workout(message):
     }
 
     # append new workout to user's list of saved workouts
-    user = get_from_redis("USER")
+    user = get_from_redis(UID, "USER")
     user = add_workout_to_database(user.get("id"), new_workout)
-    set_to_redis("USER", user)
+    set_to_redis(UID, "USER", user)
 
     message_text = \
         f"*New Workout*\n\n*{prepare_for_markdown_v2(workout_title)}* has been created\\! " \
@@ -600,9 +622,9 @@ def set_workout(message):
 
 
 def add_exercise_options(call):
-
+    global UID
     # in case the user clicked the back button after "add custom exercise", disable input flags
-    delete_from_redis("WAITING_FOR_INPUT", "WAITING_FOR_EXERCISE_NAME")
+    delete_from_redis(UID, "WAITING_FOR_INPUT", "WAITING_FOR_EXERCISE_NAME")
 
     send_edited_message(
         "How would you like to add a new exercise?",
@@ -620,13 +642,13 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
     :param skip_setting
     :return:
     """
-
-    set_to_redis("WAITING_FOR_INPUT", True)
+    global UID
+    set_to_redis(UID, "WAITING_FOR_INPUT", True)
 
     if not message and call:
         message_text = "Please give the exercise a name."
         send_edited_message(message_text, call.message.id, reply_markup=add_custom_exercise_go_back_markup())
-        set_to_redis("WAITING_FOR_EXERCISE_NAME", True)
+        set_to_redis(UID, "WAITING_FOR_EXERCISE_NAME", True)
     else:
         remove_inline_replies()  # remove the "go back" option, as it is clear the user wants to continue
 
@@ -634,52 +656,52 @@ def add_custom_exercise(call=None, message=None, message_type="", skip_setting=F
             custom_exercise = dict()
             custom_exercise["id"] = str(uuid4())
             custom_exercise['name'] = message.text
-            set_to_redis("CUSTOM_EXERCISE", custom_exercise)
-            delete_from_redis("WAITING_FOR_EXERCISE_NAME")
+            set_to_redis(UID, "CUSTOM_EXERCISE", custom_exercise)
+            delete_from_redis(UID, "WAITING_FOR_EXERCISE_NAME")
             # retrieved exercise name. Ask for youtube link
             send_message(
                 "Great!"
                 "\nWould you like to add a Youtube link associated with this exercise? If not, simply click /next.")
-            set_to_redis("WAITING_FOR_EXERCISE_VIDEO_LINK", True)
+            set_to_redis(UID, "WAITING_FOR_EXERCISE_VIDEO_LINK", True)
 
         elif message_type == "EXERCISE_VIDEO_LINK":
-            delete_from_redis("WAITING_FOR_EXERCISE_VIDEO_LINK")
+            delete_from_redis(UID, "WAITING_FOR_EXERCISE_VIDEO_LINK")
             if not skip_setting:
-                custom_exercise = get_from_redis("CUSTOM_EXERCISE")
+                custom_exercise = get_from_redis(UID, "CUSTOM_EXERCISE")
                 custom_exercise['video_link'] = message.text
-                set_to_redis("CUSTOM_EXERCISE", custom_exercise)
+                set_to_redis(UID, "CUSTOM_EXERCISE", custom_exercise)
 
             # muscles worked here
             send_message(
                 "How about a brief description of muscles worked?"
                 "\n\n(e.g 'chest, triceps, front delts')\n\nIf not, click /next to continue.")
-            set_to_redis("WAITING_FOR_MUSCLES_WORKED", True)
+            set_to_redis(UID, "WAITING_FOR_MUSCLES_WORKED", True)
 
         elif message_type == "EXERCISE_MUSCLES_WORKED":
-            delete_from_redis("WAITING_FOR_MUSCLES_WORKED")
+            delete_from_redis(UID, "WAITING_FOR_MUSCLES_WORKED")
             if not skip_setting:
                 # handle for empty entries (e.g ", , chest, ,")
                 muscles_worked = [x.strip() for x in message.text.split(",")]
                 muscles_worked = [x for x in muscles_worked if x]
                 muscles_worked = [muscle.strip().title() for muscle in muscles_worked]
-                custom_exercise = get_from_redis("CUSTOM_EXERCISE")
+                custom_exercise = get_from_redis(UID, "CUSTOM_EXERCISE")
                 custom_exercise['muscles_worked'] = muscles_worked
-                set_to_redis("CUSTOM_EXERCISE", custom_exercise)
+                set_to_redis(UID, "CUSTOM_EXERCISE", custom_exercise)
 
             # done. Add workout to users workouts.
-            delete_from_redis("WAITING_FOR_INPUT")
+            delete_from_redis(UID, "WAITING_FOR_INPUT")
 
             # default location to add exercise is the most recently added workout
             # unless specified (workout index in redis is not None)
-            workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
+            workout_index_from_redis = get_from_redis(UID, "WORKOUT_INDEX")
             workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
 
-            custom_exercise = get_from_redis("CUSTOM_EXERCISE")
-            user = get_from_redis("USER")
+            custom_exercise = get_from_redis(UID, "CUSTOM_EXERCISE")
+            user = get_from_redis(UID, "USER")
             user = add_exercise_to_database(user, custom_exercise, workout_index)
-            set_to_redis("USER", user)
+            set_to_redis(UID, "USER", user)
             # the most recently added exercise was this one, so update the global variable
-            set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", custom_exercise)
+            set_to_redis(UID, "MOST_RECENTLY_ADDED_EXERCISE", custom_exercise)
 
             exercise_added()
 
@@ -702,7 +724,7 @@ def choose_exercise_from_catalogue(call, path=None):
         if len(path) == 3:
             # user has clicked on an exercise. Show exercise details
             catalogue_exercise = exercise_data.get(path[0]).get(path[1]).get(path[2])
-            set_to_redis("CATALOGUE_EXERCISE", catalogue_exercise)
+            set_to_redis(UID, "CATALOGUE_EXERCISE", catalogue_exercise)
             message_text = stringify_exercise(catalogue_exercise)
             send_edited_message(
                 message_text,
@@ -740,20 +762,21 @@ def choose_exercise_from_catalogue(call, path=None):
 
 
 def add_catalogue_exercise(call, catalogue_exercise):
+    global UID
 
-    workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
+    workout_index_from_redis = get_from_redis(UID, "WORKOUT_INDEX")
     workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
     catalogue_exercise["id"] = str(uuid4())
-    set_to_redis("CATALOGUE_EXERCISE", catalogue_exercise)
-    user = get_from_redis("USER")
+    set_to_redis(UID, "CATALOGUE_EXERCISE", catalogue_exercise)
+    user = get_from_redis(UID, "USER")
     user = add_exercise_to_database(user, catalogue_exercise, workout_index)
-    set_to_redis("USER", user)
+    set_to_redis(UID, "USER", user)
 
     # the most recently added exercise was this one, so update the global variable
-    set_to_redis("MOST_RECENTLY_ADDED_EXERCISE", catalogue_exercise)
+    set_to_redis(UID, "MOST_RECENTLY_ADDED_EXERCISE", catalogue_exercise)
 
     # reset the exercise path
-    delete_from_redis("EXERCISE_PATH")
+    delete_from_redis(UID, "EXERCISE_PATH")
 
     exercise_added(call)
 
@@ -761,11 +784,11 @@ def add_catalogue_exercise(call, catalogue_exercise):
 def exercise_added(call=None):
 
     remove_inline_replies()
-    user = get_from_redis("USER")
-    workout_index_from_redis = get_from_redis("WORKOUT_INDEX")
+    user = get_from_redis(UID, "USER")
+    workout_index_from_redis = get_from_redis(UID, "WORKOUT_INDEX")
     workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
     workout_node_id = list(user.get('saved_workouts'))[workout_index]
-    most_recently_added_exercise = get_from_redis("MOST_RECENTLY_ADDED_EXERCISE")
+    most_recently_added_exercise = get_from_redis(UID, "MOST_RECENTLY_ADDED_EXERCISE")
 
     exercise_summary_text = \
         f"Exercise summary:\n\n" \
@@ -804,8 +827,8 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     :return:
     """
 
-    if not get_from_redis("WORKOUT"):
-        user = get_from_redis("USER")
+    if not get_from_redis(UID, "WORKOUT"):
+        user = get_from_redis(UID, "USER")
         # only happens once (when the workout gets started initially)
         new_workout = get_saved_workout_from_database(user.get("id"), workout_id)
         new_workout = new_workout.get(list(new_workout.keys())[0])
@@ -816,13 +839,13 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
         new_workout['running'] = True
         new_workout['started_at'] = int(time.time())
 
-        set_to_redis("WORKOUT", new_workout)
-        set_to_redis("CURRENT_EXERCISE_INDEX", 0)
+        set_to_redis(UID, "WORKOUT", new_workout)
+        set_to_redis(UID, "CURRENT_EXERCISE_INDEX", 0)
 
     # create a list of exercises. Whenever the user has completed the sets for that exercise, increment index parameter
-    exercise_node_ids = list(get_from_redis("WORKOUT").get('exercises'))
-    current_exercise_node_id = exercise_node_ids[get_from_redis("CURRENT_EXERCISE_INDEX")]
-    workout = get_from_redis("WORKOUT")
+    exercise_node_ids = list(get_from_redis(UID, "WORKOUT").get('exercises'))
+    current_exercise_node_id = exercise_node_ids[get_from_redis(UID, "CURRENT_EXERCISE_INDEX")]
+    workout = get_from_redis(UID, "WORKOUT")
     current_exercise = workout.get('exercises').get(current_exercise_node_id)
 
     if not new_rep_entry:
@@ -848,18 +871,18 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
 
         send_message(
             message_text,
-            reply_markup=number_pad_markup(get_from_redis("CURRENT_EXERCISE_INDEX") != 0, about_to_finish),
+            reply_markup=number_pad_markup(get_from_redis(UID, "CURRENT_EXERCISE_INDEX") != 0, about_to_finish),
             parse_mode="MarkdownV2")
 
         # view exercise details (such as the rolling average and other stats)
-        if get_from_redis("PAST_WORKOUT_DATA"):
+        if get_from_redis(UID, "PAST_WORKOUT_DATA"):
             send_message(
                 "Do you want to view your past performance with this exercise?",
                 reply_markup=view_exercise_details_markup()
             )
 
-        set_to_redis("WAITING_FOR_REP_COUNT", True)
-        set_to_redis("WAITING_FOR_INPUT", True)
+        set_to_redis(UID, "WAITING_FOR_REP_COUNT", True)
+        set_to_redis(UID, "WAITING_FOR_INPUT", True)
 
     else:
         rep_count = int(message.text)
@@ -867,7 +890,7 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
             current_exercise['reps'] = []
 
         current_exercise['reps'].append(rep_count)
-        set_to_redis("WORKOUT", workout)
+        set_to_redis(UID, "WORKOUT", workout)
 
 
 def show_exercise_stats(call):
@@ -875,10 +898,10 @@ def show_exercise_stats(call):
     exercise_performance_history = []  # e.g: user's past performance on dips: [[8, 8, 7, 6] , [7, 7, 6, 7] , [9, 8, 9]]
     message_text = ""
 
-    past_workout_data = get_from_redis("PAST_WORKOUT_DATA")
+    past_workout_data = get_from_redis(UID, "PAST_WORKOUT_DATA")
     for workout_node_id in past_workout_data:
         current_exercise_node_id = \
-            list(past_workout_data.get(workout_node_id).get('exercises'))[get_from_redis("CURRENT_EXERCISE_INDEX")]
+            list(past_workout_data.get(workout_node_id).get('exercises'))[get_from_redis(UID, "CURRENT_EXERCISE_INDEX")]
         current_exercise = past_workout_data.get(workout_node_id).get('exercises').get(current_exercise_node_id)
         exercise_performance_history.append(current_exercise.get('reps') or [])
 
@@ -932,7 +955,7 @@ def workout_completed():
     # send workout report
     # the report consists of: total rep amount | average reps per set for ever exercise.
     report = "📝 *Workout Report*\n\n"
-    workout = get_from_redis("WORKOUT")
+    workout = get_from_redis(UID, "WORKOUT")
     report += f"_Duration_: \\~ *{round(workout.get('duration') / 60)}* minutes\n\n"
     for exercise_node_id in workout.get('exercises'):
         exercise = workout.get('exercises').get(exercise_node_id)
@@ -953,7 +976,7 @@ def workout_completed():
 
 def delete_workout(call, workout_id):
 
-    user = get_from_redis("USER")
+    user = get_from_redis(UID, "USER")
     workout_title = list(get_saved_workout_from_database(user.get("id"), workout_id).values())[0].get('title')
     send_edited_message(
         f"Are you sure you want to delete {workout_title}?",
@@ -962,7 +985,7 @@ def delete_workout(call, workout_id):
 
 def handle_view_workout(call=None):
 
-    user = get_from_redis("USER")
+    user = get_from_redis(UID, "USER")
     if user.get('saved_workouts'):
         if call:
             send_edited_message(
@@ -979,7 +1002,7 @@ def handle_view_workout(call=None):
 
 def show_workout_details(call, workout_id):
 
-    user = get_from_redis("USER")
+    user = get_from_redis(UID, "USER")
     workout = get_saved_workout_from_database(user.get("id"), workout_id)
 
     send_edited_message(
@@ -990,9 +1013,10 @@ def show_workout_details(call, workout_id):
 
 
 def remove_inline_replies():
+    global UID
     # since user interaction has proceeded, remove any previous inline reply markups.
-    if exists_in_redis("SENT_MESSAGES"):
-        for message in get_from_redis("SENT_MESSAGES"):
+    if exists_in_redis(UID, "SENT_MESSAGES"):
+        for message in get_from_redis(UID, "SENT_MESSAGES"):
             message = jsonpickle.loads(message)
             if type(message.reply_markup) is telebot.types.InlineKeyboardMarkup:
                 send_edited_message(message.text, message.id, reply_markup=None)
@@ -1008,15 +1032,15 @@ def handle_explore_community():
 
 
 def handle_user_feedback(message=None):
-
+    global UID
     if not message:
         send_message(
             "How are you enjoying my service? "
             "Is there anything you would like to me to include, or improve upon?"
             "\n\nI am constantly trying to get better, so please pour your heart out!"
         )
-        set_to_redis("WAITING_FOR_INPUT", True)
-        set_to_redis("WAITING_FOR_USER_FEEDBACK", True)
+        set_to_redis(UID, "WAITING_FOR_INPUT", True)
+        set_to_redis(UID, "WAITING_FOR_USER_FEEDBACK", True)
     else:
         # received message. post it to feedback node in firebase
         feedback_object = {
@@ -1026,7 +1050,7 @@ def handle_user_feedback(message=None):
         add_feedback_to_database(feedback_object)
 
         send_message("Thanks a lot for your feedback! 😊")
-        delete_from_redis("WAITING_FOR_INPUT", "WAITING_FOR_USER_FEEDBACK")
+        delete_from_redis(UID, "WAITING_FOR_INPUT", "WAITING_FOR_USER_FEEDBACK")
 
 
 BOT.polling()
