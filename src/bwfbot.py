@@ -471,7 +471,16 @@ def handle_export(message):
 
     # reset application state for every new session
     reset_state()
-    export(message)
+    # check if user has exported data in the last 24 hours
+    user = get_from_redis(UID, "USER")
+    if user.get("exported_last_workout_data_at") and \
+            user.get("exported_last_workout_data_at") > int(time.time()) - 86400:
+        send_message(
+            "You have already exported your data once in the last 24 hours. "
+            "Please wait a bit before exporting again."
+        )
+    else:
+        export(message)
 
 
 # implement once you have users that are actually interested in this
@@ -490,7 +499,7 @@ def handle_publish_workout(message):
     user = get_from_redis(UID, "USER")
     if user.get('saved_workouts'):
         # if any one of users saved workouts has been published in the last 24 hours send error message
-        if user.get("published_last_workout_at") and user.get("published_last_workout_at") > int(time.time()) - 10:
+        if user.get("published_last_workout_at") and user.get("published_last_workout_at") > int(time.time()) - 86400:
             send_message("You have already published a workout in the last 24 hours. "
                          "Please wait a bit before publishing another one.")
         else:
@@ -1247,6 +1256,9 @@ def export(message):
 
         if os.path.exists("workout_data.json"):
             os.remove("workout_data.json")
+
+        user = update_user_property_in_database(UID, {"exported_last_workout_data_at": int(time.time())})
+        set_to_redis(UID, "USER", user)
 
     else:
         send_message("You have neither created nor completed a workout. Theres nothing to export. 🙈")
