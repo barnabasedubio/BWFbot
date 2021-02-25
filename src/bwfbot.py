@@ -877,7 +877,6 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     """
 
     if not get_from_redis(UID, "WORKOUT"):
-        user = get_from_redis(UID, "USER")
         # only happens once (when the workout gets started initially)
         new_workout = get_saved_workout_from_user(workout_id)
         # give the new workout a new id
@@ -1090,21 +1089,28 @@ def publish_workout(call, workout_id, confirmed):
     else:
         workout = get_saved_workout_from_database(UID, workout_id)
         workout_key = list(workout.keys())[0]
+        workout = workout.get(workout_key)
+        if workout.get("published"):
+            send_edited_message(
+                f"You have already published *{prepare_for_markdown_v2(workout.get('title'))}*\\. 😉",
+                call.message.id,
+                parse_mode="MarkdownV2"
+            )
+        else:
+            update_saved_workout_in_database(UID, workout_key, {"published": True})
+            user = update_user_property_in_database(UID, {"published_last_workout_at": int(time.time())})
 
-        update_saved_workout_in_database(UID, workout_key, {"published": True})
-        user = update_user_property_in_database(UID, {"published_last_workout_at": int(time.time())})
+            set_to_redis(UID, "USER", user)
+            workout = get_saved_workout_from_user(workout_id)
+            publish_saved_workout(workout)
 
-        set_to_redis(UID, "USER", user)
-        workout = get_saved_workout_from_user(workout_id)
-        publish_saved_workout(workout)
-
-        BOT.answer_callback_query(call.id)
-        send_edited_message(
-            f"Great\\! Thank you for publishing *{prepare_for_markdown_v2(workout.get('title'))}*\\. 😊",
-            call.message.id,
-            reply_markup=start_options_markup(),
-            parse_mode="MarkdownV2"
-        )
+            BOT.answer_callback_query(call.id)
+            send_edited_message(
+                f"Great\\! Thank you for publishing *{prepare_for_markdown_v2(workout.get('title'))}*\\. 😊",
+                call.message.id,
+                reply_markup=start_options_markup(),
+                parse_mode="MarkdownV2"
+            )
 
 
 def get_saved_workout_from_user(workout_id):
