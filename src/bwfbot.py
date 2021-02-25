@@ -409,10 +409,13 @@ def handle_delete_workout(message):
     user = get_from_redis(UID, "USER")
     if user.get('saved_workouts'):
         message_text = \
-            "Which workout would you like to delete?\n\n" \
-            "(Note: this doesn't affect your already completed workouts, so no worries)"
+            "*Delete workout*\n\nWhich workout would you like to delete?\n\n" \
+            "*Note:* this doesn't affect your already completed workouts\\."
 
-        send_message(message_text, reply_markup=delete_workout_markup(user.get('saved_workouts')))
+        send_message(
+            message_text,
+            reply_markup=delete_workout_markup(user.get('saved_workouts')),
+            parse_mode="MarkdownV2")
     else:
         send_message("You don't have any stored workouts.")
 
@@ -878,8 +881,6 @@ def add_catalogue_exercise(call, catalogue_exercise):
 
 
 def exercise_added(call=None):
-
-    remove_inline_replies()
     user = get_from_redis(UID, "USER")
     workout_index_from_redis = get_from_redis(UID, "WORKOUT_INDEX")
     workout_index = workout_index_from_redis if type(workout_index_from_redis) is int else -1
@@ -1077,18 +1078,17 @@ def delete_workout(call, workout_id):
 
 
 def handle_view_workout(call=None):
-
     user = get_from_redis(UID, "USER")
     if user.get('saved_workouts'):
         if call:
             send_edited_message(
-                "Which workout would you like to view?",
+                "*View workout*\n\nWhich workout would you like to view?",
                 call.message.id,
-                reply_markup=view_workout_details_markup(user.get('saved_workouts')))
+                reply_markup=view_workout_details_markup(user.get('saved_workouts')), parse_mode="MarkdownV2")
         else:
             send_message(
-                "Which workout would you like to view?",
-                reply_markup=view_workout_details_markup(user.get('saved_workouts')))
+                "*View workout*\n\nWhich workout would you like to view?",
+                reply_markup=view_workout_details_markup(user.get('saved_workouts')), parse_mode="MarkdownV2")
     else:
         send_message("You don't have any stored workouts.")
 
@@ -1119,6 +1119,8 @@ def remove_inline_replies():
             message = jsonpickle.loads(message)
             if type(message.reply_markup) is telebot.types.InlineKeyboardMarkup:
                 send_edited_message(message.text, message.id, reply_markup=None)
+
+    delete_from_redis(UID, "SENT_MESSAGES")
 
 
 def ask_to_show_recommended_routines(call):
@@ -1186,9 +1188,10 @@ def view_recommended_routines(call, difficulty=None):
         show_recommended_routine_details(call, workout)
     else:
         send_edited_message(
-            "Which recommended routine progression would you like to view?",
+            "*Recommended Routine*\n\nWhich recommended routine progression would you like to view?",
             call.message.id,
-            reply_markup=choose_recommended_routine_markup()
+            reply_markup=choose_recommended_routine_markup(),
+            parse_mode="MarkdownV2"
         )
 
 
@@ -1280,9 +1283,11 @@ def handle_user_feedback(message=None):
     global UID
     if not message:
         send_message(
-            "How are you enjoying my service? "
-            "Is there anything you would like to me to include, or improve upon?"
-            "\n\nI am constantly trying to get better, so please pour your heart out!"
+            "*Feedback*\n\nHere you can report issues you have encountered or let me know of any things you would "
+            "like me to include or improve upon\\.\n\nI'll read every single one\\.\n\n"
+            "I'm constantly aiming to improve the _myBWF_ Workout Assistant, "
+            "so every bit of feedback is incredibly valuable\\.",
+            parse_mode="MarkdownV2"
         )
         set_to_redis(UID, "WAITING_FOR_INPUT", True)
         set_to_redis(UID, "WAITING_FOR_USER_FEEDBACK", True)
