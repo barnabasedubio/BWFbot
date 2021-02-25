@@ -75,19 +75,29 @@
           "Triceps"
         ]
       },
-      "Bulgarian Ring Dips": {
-        "name": "Bulgarian Ring Dips",
-        "video_link": "https://youtu.be/iC2LLN7cuFs?t=34",
+      "RTO Dips": {
+        "name": "RTO Dips",
+        "video_link": "https://www.youtube.com/watch?v=bThpfeEyIEY",
         "muscles_worked": [
           "Lateral Delts",
           "Chest",
-          "Triceps"
+          "Triceps",
+          "Biceps"
         ]
       }
     }
   },
   "Vertical Pull":  {
     "Pull Up": {
+      "Scapular Pulls": {
+        "name": "Scapular Pulls",
+        "video_link": "https://youtu.be/KG8JZJ22NQI?t=19",
+        "muscles_worked": [
+          "Lats",
+          "Traps",
+          "Rhomboids"
+        ]
+      },
       "Pull Up Negatives": {
         "name": "Pull Up Negatives",
         "video_link": "https://youtu.be/gbPURTSxQLY?t=2",
@@ -102,6 +112,15 @@
         "muscles_worked": [
           "Lats",
           "Traps"
+        ]
+      },
+      "L-Sit Pull Ups": {
+        "name": "L-Sit Pull Ups",
+        "video_link": "https://youtu.be/wEahB-TjjaY?t=16",
+        "muscles_worked": [
+          "Lats",
+          "Traps",
+          "Abs"
         ]
       }
     },
@@ -170,9 +189,9 @@
           "Abs"
         ]
       },
-      "Diamond Push Ups": {
-        "name": "Diamond Push Ups",
-        "video_link": "https://youtu.be/J0DnG1_S92I?t=49",
+      "Archer Push Ups": {
+        "name": "Archer Push Ups",
+        "video_link": "https://youtu.be/A0r8ploEnZY?t=48",
         "muscles_worked": [
           "Chest",
           "Delts",
@@ -180,9 +199,9 @@
           "Abs"
         ]
       },
-      "Archer Push Ups": {
-        "name": "Archer Push Ups",
-        "video_link": "https://youtu.be/A0r8ploEnZY?t=48",
+      "RTO Push Ups": {
+        "name": "RTO Push Ups",
+        "video_link": "https://youtu.be/fzasKdJnoeQ?t=93",
         "muscles_worked": [
           "Chest",
           "Delts",
@@ -193,9 +212,9 @@
     }
   },
   "Horizontal Pull":  {
-    "Row": {
-      "Inverted Rows": {
-        "name": "Inverted Rows",
+    "Inverted Row": {
+      "Rows": {
+        "name": "Rows",
         "video_link": "https://youtu.be/eQ4GKdK_Xps?t=228",
         "muscles_worked": [
           "Back",
@@ -204,8 +223,8 @@
           "Posterior Delts"
         ]
       },
-      "Elevated Rows": {
-        "name": "Elevated Rows",
+      "Elevated Ring Rows": {
+        "name": "Elevated Ring Rows",
         "video_link": "https://youtu.be/eQ4GKdK_Xps?t=234",
         "muscles_worked": [
           "Back",
@@ -214,8 +233,8 @@
           "Posterior Delts"
         ]
       },
-      "Archer Rows": {
-        "name": "Archer Rows",
+      "Archer Ring Rows": {
+        "name": "Archer Ring Rows",
         "video_link": "https://www.youtube.com/watch?v=RZctH9Fj6K8",
         "muscles_worked": [
           "Back",
@@ -254,10 +273,15 @@
         "muscles_worked": ["Abs", "Obliques", "Glutes"]
       }
     },
-    "Knee Raise": {
+    "Hanging Raise": {
       "Knee Raises": {
         "name": "Knee Raises",
         "video_link": "https://youtu.be/NMgWyTivrTI?t=720",
+        "muscles_worked": ["Abs", "Obliques", "Hip Flexors", "Forearms"]
+      },
+      "Leg Raises": {
+        "name": "Leg Raises",
+        "video_link": "https://youtu.be/QyVq5oUBpss?t=67",
         "muscles_worked": ["Abs", "Obliques", "Hip Flexors", "Forearms"]
       }
     },
@@ -342,6 +366,14 @@
         "name": "Single Legged Deadlift",
         "video_link": "https://youtu.be/HtHxnWmMgzM?t=10",
         "muscles_worked": ["Glutes", "Hamstrings"]
+      },
+      "Single Legged Hip Thrusts": {
+        "name": "Single Legged Hip Thrusts",
+        "video_link": "https://youtu.be/8J5jxJpr6XI?t=15",
+        "muscles_worked": [
+          "Glutes",
+          "Hamstrings"
+        ]
       },
       "Banded Nordic Curl Negatives": {
         "name": "Banded Nordic Curl Negatives",

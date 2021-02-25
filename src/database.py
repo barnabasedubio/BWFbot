@@ -80,12 +80,8 @@ def update_saved_workout_in_database(user_id, workout_key, payload):
     return get_user_from_database(user_id)
 
 
-def publish_saved_workout(workout):
-    DB.reference("/published_workouts").push(workout)
-
-
-def get_published_workouts_from_database(limit):
-    return DB.reference("/published_workouts").order_by_child("title").limit_to_first(limit).get()
+def publish_recommended_routine_to_database(workout):
+    DB.reference("/published_workouts/recommended_routine").push(workout)
 
 
 def add_exercise_to_database(user, exercise, workout_index):

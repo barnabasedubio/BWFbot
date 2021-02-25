@@ -200,7 +200,6 @@ def add_custom_exercise_go_back_markup():
 def choose_community_workout_type_markup():
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("Recommended Routine", callback_data="SHOW_RECOMMENDED_ROUTINES"))
-    # markup.add(InlineKeyboardButton("User-generated workouts", callback_data="SHOW_USER_GENERATED_WORKOUTS"))
     markup.add(InlineKeyboardButton("↩️ Go back", callback_data="start_menu"))
     return markup
 

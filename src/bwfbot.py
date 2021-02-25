@@ -251,10 +251,6 @@ def handle_callback_query(call):
     elif call.data == "SHOW_RECOMMENDED_ROUTINES":
         handle_show_recommended_routines(call)
 
-    elif call.data == "SHOW_USER_GENERATED_WORKOUTS":
-        handle_show_user_generated_workouts(call)
-
-
     elif call.data.startswith("RESET_STATE:"):
         answer = call.data.replace("RESET_STATE:", "")
         reset_state_flag = True if answer == "YES" else False
@@ -499,7 +495,7 @@ def handle_publish_workout(message):
     user = get_from_redis(UID, "USER")
     if user.get('saved_workouts'):
         # if any one of users saved workouts has been published in the last 24 hours send error message
-        if user.get("published_last_workout_at") and user.get("published_last_workout_at") > int(time.time()) - 86400:
+        if user.get("published_last_workout_at") and user.get("published_last_workout_at") > int(time.time()) - 2:
             send_message("You have already published a workout in the last 24 hours. "
                          "Please wait a bit before publishing another one.")
         else:
@@ -880,7 +876,7 @@ def exercise_added(call=None):
 
     confirmation_text = \
         f"Added *{prepare_for_markdown_v2(most_recently_added_exercise.get('name'))}* to " \
-        f"*{user.get('saved_workouts').get(workout_node_id).get('title')}*\\!\n" \
+        f"*{prepare_for_markdown_v2(user.get('saved_workouts').get(workout_node_id).get('title'))}*\\!\n" \
         f"Would you like to add another exercise?"
 
     message_text = exercise_summary_text + "\n" + confirmation_text
@@ -1107,7 +1103,6 @@ def handle_community_request(call):
     send_edited_message(message_text, call.message.id, reply_markup=explore_community_workouts_answer_markup())
 
 
-# works, but dont add it yet until users actually show interest in it
 def publish_workout(call, workout_id, confirmed):
     global UID
 
@@ -1138,7 +1133,7 @@ def publish_workout(call, workout_id, confirmed):
 
             set_to_redis(UID, "USER", user)
             workout = get_saved_workout_from_user(workout_id)
-            publish_saved_workout(workout)
+            # TODO: publish to DB function
 
             BOT.answer_callback_query(call.id)
             send_edited_message(
@@ -1175,21 +1170,6 @@ def handle_show_recommended_routines(call):
         call.message.id,
         reply_markup=show_recommended_routine_progressions_markup(),
         parse_mode="MarkdownV2")
-
-
-def handle_show_user_generated_workouts(call):
-    published_workouts = get_published_workouts_from_database(limit=100)
-    if published_workouts:
-        message_text = "*User\\-generated workouts*"
-        published_workouts = dict(published_workouts)
-        send_edited_message(
-            message_text,
-            call.message.id,
-            reply_markup=view_workout_details_markup(published_workouts, comes_from="explore_community"),
-            parse_mode="MarkdownV2"
-        )
-    else:
-        send_edited_message("There don't seem to be any user-generated workouts at the moment.", call.message.id)
 
 
 def export(message):
