@@ -443,7 +443,15 @@ def user_feedback(message):
     # reset application state for every new session
     reset_state()
 
-    handle_user_feedback()
+    # check if user has sent feedback in the last 5 minutes
+    user = get_from_redis(UID, "USER")
+    if user.get("sent_last_feedback_at") and \
+            user.get("sent_last_feedback_at") > int(time.time()) - 300:
+        send_message(
+            "Would you mind waiting a few minutes before posting more feedback? Thanks a lot 😄"
+        )
+    else:
+        handle_user_feedback()
 
 
 @BOT.message_handler(commands=["stats", "publish"])
@@ -1288,6 +1296,9 @@ def handle_user_feedback(message=None):
 
         send_message("Thanks a lot for your feedback! 😊")
         delete_from_redis(UID, "WAITING_FOR_INPUT", "WAITING_FOR_USER_FEEDBACK")
+
+        user = update_user_property_in_database(UID, {"sent_last_feedback_at": int(time.time())})
+        set_to_redis(UID, "USER", user)
 
 
 BOT.polling()
