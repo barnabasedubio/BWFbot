@@ -1,3 +1,4 @@
+import os
 import yaml
 import json
 import time
@@ -429,6 +430,7 @@ def view_workout(message):
 
 @BOT.message_handler(commands=["feedback"])
 def user_feedback(message):
+    remove_inline_replies()
     workout = get_from_redis(UID, "WORKOUT")
     if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
         confirm_reset_state()
@@ -461,6 +463,7 @@ def feature_in_progress(message):
 
 @BOT.message_handler(commands=["export"])
 def handle_export(message):
+    remove_inline_replies()
     workout = get_from_redis(UID, "WORKOUT")
     if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
         confirm_reset_state()
@@ -468,7 +471,7 @@ def handle_export(message):
 
     # reset application state for every new session
     reset_state()
-    export()
+    export(message)
 
 
 # implement once you have users that are actually interested in this
@@ -1180,7 +1183,7 @@ def handle_show_user_generated_workouts(call):
         send_edited_message("There don't seem to be any user-generated workouts at the moment.", call.message.id)
 
 
-def export():
+def export(message):
     user = get_from_redis(UID, "USER")
     if user.get("saved_workouts") or user.get("completed_workouts"):
         send_message("Hodl on a sec...")
@@ -1188,28 +1191,62 @@ def export():
             "saved_workouts": {},
             "completed_workouts": {}
         }
-        for ix, workout_node in enumerate(list(user.get("saved_workouts"))):
-            workout = user.get("saved_workouts").get(workout_node)
-            export_data.get("saved_workouts")[str(ix)] = {
-                "created_at": datetime.datetime.fromtimestamp(workout.get("created_at")).strftime('%Y-%m-%d %H:%M:%S'),
-                "title": workout.get("title"),
-                "exercises": {}
-            }
-            if workout.get("exercises"):
-                for iy, exercise_node in enumerate(list(workout.get("exercises"))):
-                    exercise = workout.get("exercises").get(exercise_node)
-                    export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)] = {}
-                    export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)]["name"] = \
-                        exercise.get("name")
-                    if exercise.get("video_link"):
-                        export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)]["video_link"] = \
-                            exercise.get("video_link")
-                    if exercise.get("muscles_worked"):
-                        export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)]["muscles_worked"] = \
-                            exercise.get("muscles_worked")
+        if user.get("saved_workouts"):
+            for ix, workout_node in enumerate(list(user.get("saved_workouts"))):
+                workout = user.get("saved_workouts").get(workout_node)
+                export_data.get("saved_workouts")[str(ix)] = {
+                    "created_at": datetime.datetime.fromtimestamp(workout.get("created_at")).strftime('%Y-%m-%d %H:%M:%S'),
+                    "title": workout.get("title"),
+                    "exercises": {}
+                }
+                if workout.get("exercises"):
+                    for iy, exercise_node in enumerate(list(workout.get("exercises"))):
+                        exercise = workout.get("exercises").get(exercise_node)
+                        export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)] = {}
+                        export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)]["name"] = \
+                            exercise.get("name")
+                        if exercise.get("video_link"):
+                            export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)]["video_link"] = \
+                                exercise.get("video_link")
+                        if exercise.get("muscles_worked"):
+                            export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)]["muscles_worked"] = \
+                                exercise.get("muscles_worked")
 
-        with open("export_data.json", "w") as fo:
+        if user.get("completed_workouts"):
+            for ix, workout_node in enumerate(list(user.get("completed_workouts"))):
+                workout = user.get("completed_workouts").get(workout_node)
+                export_data.get("completed_workouts")[str(ix)] = {
+                    "started_at": datetime.datetime.fromtimestamp(workout.get("started_at")).strftime('%Y-%m-%d %H:%M:%S'),
+                    "title": workout.get("title"),
+                    "duration": workout.get("duration"),
+                    "exercises": {}
+                }
+                if workout.get("exercises"):
+                    for iy, exercise_node in enumerate(list(workout.get("exercises"))):
+                        exercise = workout.get("exercises").get(exercise_node)
+                        export_data.get("completed_workouts").get(str(ix)).get("exercises")[str(iy)] = {}
+                        export_data.get("completed_workouts").get(str(ix)).get("exercises")[str(iy)]["name"] = \
+                            exercise.get("name")
+                        if exercise.get("video_link"):
+                            export_data.get("completed_workouts").get(str(ix)).get("exercises")[str(iy)]["video_link"] = \
+                                exercise.get("video_link")
+                        if exercise.get("muscles_worked"):
+                            export_data.get("completed_workouts").get(str(ix)).get("exercises")[str(iy)]["muscles_worked"] = \
+                                exercise.get("muscles_worked")
+                        if exercise.get("reps"):
+                            export_data.get("completed_workouts").get(str(ix)).get("exercises")[str(iy)]["reps"] = \
+                                exercise.get("reps")
+
+        with open("workout_data.json", "w") as fo:
             fo.write(jsonpickle.dumps(export_data))
+
+        with open("workout_data.json", "r") as fo:
+            time.sleep(0.5)
+            send_message("Here you go!")
+            BOT.send_document(get_from_redis(UID, "CHAT_ID"), fo)
+
+        if os.path.exists("workout_data.json"):
+            os.remove("workout_data.json")
 
     else:
         send_message("You have neither created nor completed a workout. Theres nothing to export. 🙈")
