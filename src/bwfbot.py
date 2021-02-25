@@ -798,7 +798,7 @@ def choose_exercise_from_catalogue(call, path=None):
     :return:
     """
 
-    with open("exercises.json", "r") as f:
+    with open("exercise_catalogue.json", "r") as f:
         exercise_data = json.loads(f.read())
 
     # list view is used when listing exercises
