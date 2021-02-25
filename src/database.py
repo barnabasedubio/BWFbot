@@ -84,6 +84,10 @@ def publish_saved_workout(workout):
     DB.reference("/published_workouts").push(workout)
 
 
+def get_published_workouts_from_database(limit):
+    return DB.reference("/published_workouts").order_by_child("title").limit_to_first(limit).get()
+
+
 def add_exercise_to_database(user, exercise, workout_index):
     user_node_id = get_user_node_key_from_database(user.get("id"))
     workout_node_id = list(user.get('saved_workouts'))[workout_index]

@@ -1,6 +1,7 @@
 import yaml
 import json
 import time
+import datetime
 import telebot
 
 from telebot import apihelper
@@ -132,7 +133,7 @@ def handle_callback_query(call):
         add_catalogue_exercise(call, catalogue_exercise)
 
     elif call.data == "explore_community":
-        handle_explore_community()
+        handle_explore_community(call)
 
     elif call.data == "request_community":
         handle_community_request(call)
@@ -245,6 +246,13 @@ def handle_callback_query(call):
             call.message.id,
             parse_mode="MarkdownV2"
         )
+
+    elif call.data == "SHOW_RECOMMENDED_ROUTINES":
+        handle_show_recommended_routines(call)
+
+    elif call.data == "SHOW_USER_GENERATED_WORKOUTS":
+        handle_show_user_generated_workouts(call)
+
 
     elif call.data.startswith("RESET_STATE:"):
         answer = call.data.replace("RESET_STATE:", "")
@@ -432,6 +440,38 @@ def user_feedback(message):
     handle_user_feedback()
 
 
+@BOT.message_handler(commands=["stats", "publish"])
+def feature_in_progress(message):
+    remove_inline_replies()
+
+    workout = get_from_redis(UID, "WORKOUT")
+    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
+        confirm_reset_state()
+        return
+
+    # reset application state for every new session
+    reset_state()
+
+    send_message(
+        "🚧 Please bear with me, I am currently still working on this feature."
+        "\n\nIn the meantime, please send me some /feedback as to what you would like to see once it's done!")
+
+    increment_in_redis("0000", f"{message.text[1:].upper()}_REQUESTED")
+
+
+@BOT.message_handler(commands=["export"])
+def handle_export(message):
+    workout = get_from_redis(UID, "WORKOUT")
+    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
+        confirm_reset_state()
+        return
+
+    # reset application state for every new session
+    reset_state()
+    export()
+
+
+# implement once you have users that are actually interested in this
 @BOT.message_handler(commands=["publish"])
 def handle_publish_workout(message):
     remove_inline_replies()
@@ -447,32 +487,15 @@ def handle_publish_workout(message):
     user = get_from_redis(UID, "USER")
     if user.get('saved_workouts'):
         # if any one of users saved workouts has been published in the last 24 hours send error message
-        if user.get("published_last_workout_at") and user.get("published_last_workout_at") > int(time.time()) - 86400:
+        if user.get("published_last_workout_at") and user.get("published_last_workout_at") > int(time.time()) - 10:
             send_message("You have already published a workout in the last 24 hours. "
                          "Please wait a bit before publishing another one.")
         else:
             send_message(
-                "Which of your workouts would you like to share with the community?",
-                reply_markup=publish_workout_markup(user.get('saved_workouts')))
+                "*Publish workout*\n\nWhich of your workouts would you like to share with the community?",
+                reply_markup=publish_workout_markup(user.get('saved_workouts')), parse_mode="MarkdownV2")
     else:
         send_message("You don't have any stored workouts. Please create one first before publishing.")
-
-
-@BOT.message_handler(commands=["stats"])
-def feature_in_progress(message):
-    remove_inline_replies()
-
-    workout = get_from_redis(UID, "WORKOUT")
-    if workout and workout.get('running') and not get_from_redis(UID, "RESET_STATE"):
-        confirm_reset_state()
-        return
-
-    # reset application state for every new session
-    reset_state()
-
-    send_message(
-        "Please bear with me, I am currently still working on this feature. 😅"
-        "\n\nIn the meantime, please send me some /feedback as to what you would like to see once it's done!")
 
 
 # only if bot is expecting user input
@@ -569,7 +592,7 @@ def choose_workout(call=None, comes_from=None):
     user = get_from_redis(UID, "USER")
     if user.get('saved_workouts'):
         message_text = \
-            "Which workout routine would you like to start?\n\n" \
+            "*Start workout*\n\nWhich workout routine would you like to start?\n\n" \
             "If you want to view the exercises in each workout, click /view\\."
 
         if comes_from == "add_another_exercise":
@@ -1072,6 +1095,7 @@ def handle_community_request(call):
     send_edited_message(message_text, call.message.id, reply_markup=explore_community_workouts_answer_markup())
 
 
+# works, but dont add it yet until users actually show interest in it
 def publish_workout(call, workout_id, confirmed):
     global UID
 
@@ -1092,7 +1116,7 @@ def publish_workout(call, workout_id, confirmed):
         workout = workout.get(workout_key)
         if workout.get("published"):
             send_edited_message(
-                f"You have already published *{prepare_for_markdown_v2(workout.get('title'))}*\\. 😉",
+                f"*{prepare_for_markdown_v2(workout.get('title'))}* is already published\\. 😉",
                 call.message.id,
                 parse_mode="MarkdownV2"
             )
@@ -1122,8 +1146,73 @@ def get_saved_workout_from_user(workout_id):
                 return user.get("saved_workouts").get(workout_node)
 
 
-def handle_explore_community():
-    pass
+def handle_explore_community(call):
+    message_text = f"*Community*\n\nWhich type of community workouts would you like to browse?"
+    send_edited_message(
+        message_text,
+        call.message.id,
+        reply_markup=choose_community_workout_type_markup(),
+        parse_mode="MarkdownV2"
+    )
+
+
+def handle_show_recommended_routines(call):
+    message_text = f"*Recommended Routine*\n\nWhich progression do you want to look at?"
+    send_edited_message(
+        message_text,
+        call.message.id,
+        reply_markup=show_recommended_routine_progressions_markup(),
+        parse_mode="MarkdownV2")
+
+
+def handle_show_user_generated_workouts(call):
+    published_workouts = get_published_workouts_from_database(limit=100)
+    if published_workouts:
+        message_text = "*User\\-generated workouts*"
+        published_workouts = dict(published_workouts)
+        send_edited_message(
+            message_text,
+            call.message.id,
+            reply_markup=view_workout_details_markup(published_workouts, comes_from="explore_community"),
+            parse_mode="MarkdownV2"
+        )
+    else:
+        send_edited_message("There don't seem to be any user-generated workouts at the moment.", call.message.id)
+
+
+def export():
+    user = get_from_redis(UID, "USER")
+    if user.get("saved_workouts") or user.get("completed_workouts"):
+        send_message("Hodl on a sec...")
+        export_data = {
+            "saved_workouts": {},
+            "completed_workouts": {}
+        }
+        for ix, workout_node in enumerate(list(user.get("saved_workouts"))):
+            workout = user.get("saved_workouts").get(workout_node)
+            export_data.get("saved_workouts")[str(ix)] = {
+                "created_at": datetime.datetime.fromtimestamp(workout.get("created_at")).strftime('%Y-%m-%d %H:%M:%S'),
+                "title": workout.get("title"),
+                "exercises": {}
+            }
+            if workout.get("exercises"):
+                for iy, exercise_node in enumerate(list(workout.get("exercises"))):
+                    exercise = workout.get("exercises").get(exercise_node)
+                    export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)] = {}
+                    export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)]["name"] = \
+                        exercise.get("name")
+                    if exercise.get("video_link"):
+                        export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)]["video_link"] = \
+                            exercise.get("video_link")
+                    if exercise.get("muscles_worked"):
+                        export_data.get("saved_workouts").get(str(ix)).get("exercises")[str(iy)]["muscles_worked"] = \
+                            exercise.get("muscles_worked")
+
+        with open("export_data.json", "w") as fo:
+            fo.write(jsonpickle.dumps(export_data))
+
+    else:
+        send_message("You have neither created nor completed a workout. Theres nothing to export. 🙈")
 
 
 def handle_user_feedback(message=None):
