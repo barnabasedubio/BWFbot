@@ -47,6 +47,12 @@ def add_user_to_database(user_id, first_name, last_name, username):
     return get_user_from_database(user_id)
 
 
+def update_user_property_in_database(user_id, payload):
+    user_node_id = get_user_node_key_from_database(user_id)
+    DB.reference(f"/users/{user_node_id}").update(payload)
+    return get_user_from_database(user_id)
+
+
 def get_saved_workout_from_database(user_id, workout_id):
     user_node_id = get_user_node_key_from_database(user_id)
     workout = DB.reference(f"/users/{user_node_id}/saved_workouts/").order_by_child("id").equal_to(workout_id).get()

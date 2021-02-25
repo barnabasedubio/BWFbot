@@ -446,9 +446,14 @@ def handle_publish_workout(message):
 
     user = get_from_redis(UID, "USER")
     if user.get('saved_workouts'):
-        send_message(
-            "Which of your workouts would you like to share with the community?",
-            reply_markup=publish_workout_markup(user.get('saved_workouts')))
+        # if any one of users saved workouts has been published in the last 24 hours send error message
+        if user.get("published_last_workout_at") and user.get("published_last_workout_at") > int(time.time()) - 86400:
+            send_message("You have already published a workout in the last 24 hours. "
+                         "Please wait a bit before publishing another one.")
+        else:
+            send_message(
+                "Which of your workouts would you like to share with the community?",
+                reply_markup=publish_workout_markup(user.get('saved_workouts')))
     else:
         send_message("You don't have any stored workouts. Please create one first before publishing.")
 
@@ -1086,10 +1091,8 @@ def publish_workout(call, workout_id, confirmed):
         workout = get_saved_workout_from_database(UID, workout_id)
         workout_key = list(workout.keys())[0]
 
-        user = update_saved_workout_in_database(UID, workout_key, {
-            "published": True,
-            "published_at": int(time.time())
-        })
+        update_saved_workout_in_database(UID, workout_key, {"published": True})
+        user = update_user_property_in_database(UID, {"published_last_workout_at": int(time.time())})
 
         set_to_redis(UID, "USER", user)
         workout = get_saved_workout_from_user(workout_id)
