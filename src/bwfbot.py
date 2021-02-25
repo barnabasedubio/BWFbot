@@ -86,7 +86,8 @@ def reset_state():
         "EXERCISE_PATH",
         "RESET_STATE",
         "CURRENT_EXERCISE_INDEX",
-        "PUBLISH_WORKOUT_ID"
+        "PUBLISH_WORKOUT_ID",
+        "RECOMMENDED_ROUTINE"
     )
 
 
@@ -110,8 +111,8 @@ def handle_callback_query(call):
     global UID
     UID = str(call.from_user.id)
 
-    if not call.data == "add_catalogue_exercise" and \
-            "CONFIRM_PUBLISH_WORKOUT:" not in call.data:
+    if call.data not in ("add_catalogue_exercise", "ADD_RECOMMENDED_ROUTINE") \
+            and "CONFIRM_DELETE_WORKOUT:" not in call.data:
         BOT.answer_callback_query(callback_query_id=call.id)  # remove loading spinner
 
     if call.data == "choose_workouts":
@@ -133,11 +134,8 @@ def handle_callback_query(call):
         catalogue_exercise = get_from_redis(UID, "CATALOGUE_EXERCISE")
         add_catalogue_exercise(call, catalogue_exercise)
 
-    elif call.data == "explore_community":
-        handle_explore_community(call)
-
-    elif call.data == "request_community":
-        handle_community_request(call)
+    elif call.data == "ASK_TO_SHOW_RECOMMENDED_ROUTINES":
+        ask_to_show_recommended_routines(call)
 
     elif call.data == "start_menu":
         show_start_options(call=call)
@@ -214,6 +212,7 @@ def handle_callback_query(call):
 
         user = delete_saved_workout_from_database(user.get("id"), workout_key)
         set_to_redis(UID, "USER", user)
+        BOT.answer_callback_query(callback_query_id=call.id)
         send_edited_message(
             f"Done\\! *{prepare_for_markdown_v2(workout_title)}* is gone from your saved workouts\\.",
             call.message.id,
@@ -224,11 +223,12 @@ def handle_callback_query(call):
         workout_id = call.data.replace("ABORT_DELETE_WORKOUT:", "")
         workout = get_saved_workout_from_user(workout_id)
         workout_title = prepare_for_markdown_v2(workout.get('title'))
-        send_edited_message(f"Gotcha! Will not delete {workout_title}.", call.message.id)
+        send_edited_message(f"Gotcha\\! Will not delete *{workout_title}*\\.", call.message.id, parse_mode="MarkdownV2")
 
     elif call.data.startswith("VIEW_WORKOUT:"):
         workout_id = call.data.replace("VIEW_WORKOUT:", "")
-        show_workout_details(call, workout_id)
+        workout = get_saved_workout_from_user(workout_id)
+        show_saved_workout_details(call, workout)
 
     elif call.data.startswith("PUBLISH_WORKOUT:"):
         workout_id = call.data.replace("PUBLISH_WORKOUT:", "")
@@ -248,8 +248,16 @@ def handle_callback_query(call):
             parse_mode="MarkdownV2"
         )
 
-    elif call.data == "SHOW_RECOMMENDED_ROUTINES":
-        handle_show_recommended_routines(call)
+    elif call.data == "VIEW_RECOMMENDED_ROUTINES":
+        view_recommended_routines(call)
+
+    elif call.data.startswith("RECOMMENDED_ROUTINE:"):
+        difficulty_level = call.data.replace("RECOMMENDED_ROUTINE:", "")
+        view_recommended_routines(call, difficulty_level)
+
+    elif call.data == "ADD_RECOMMENDED_ROUTINE":
+        recommended_routine = get_from_redis(UID, "RECOMMENDED_ROUTINE")
+        add_recommended_routine(call, recommended_routine)
 
     elif call.data.startswith("RESET_STATE:"):
         answer = call.data.replace("RESET_STATE:", "")
@@ -690,7 +698,7 @@ def set_workout(message):
 
     # append new workout to user's list of saved workouts
     user = get_from_redis(UID, "USER")
-    user = add_saved_workout_to_database(user.get("id"), new_workout)
+    user = add_to_saved_workouts(user.get("id"), new_workout)
     set_to_redis(UID, "USER", user)
 
     message_text = \
@@ -1056,8 +1064,8 @@ def delete_workout(call, workout_id):
 
     workout_title = get_saved_workout_from_user(workout_id).get('title')
     send_edited_message(
-        f"Are you sure you want to delete {workout_title}?",
-        call.message.id, reply_markup=delete_workout_confirmation_markup(workout_id))
+        f"Are you sure you want to delete *{prepare_for_markdown_v2(workout_title)}*?",
+        call.message.id, reply_markup=delete_workout_confirmation_markup(workout_id), parse_mode="MarkdownV2")
 
 
 def handle_view_workout(call=None):
@@ -1077,10 +1085,7 @@ def handle_view_workout(call=None):
         send_message("You don't have any stored workouts.")
 
 
-def show_workout_details(call, workout_id):
-
-    workout = get_saved_workout_from_user(workout_id)
-
+def show_saved_workout_details(call, workout):
     send_edited_message(
         stringify_workout(workout),
         call.message.id,
@@ -1088,9 +1093,19 @@ def show_workout_details(call, workout_id):
         reply_markup=return_to_view_workout_details_markup())
 
 
+def show_recommended_routine_details(call, workout):
+    send_edited_message(
+        stringify_workout(workout),
+        call.message.id,
+        parse_mode="MarkdownV2",
+        reply_markup=add_recommended_routine_markup(workout.get("id"))
+    )
+
+
 def remove_inline_replies():
     global UID
     # since user interaction has proceeded, remove any previous inline reply markups.
+    # TODO: figure out why the reply markup gets removed as well
     if exists_in_redis(UID, "SENT_MESSAGES"):
         for message in get_from_redis(UID, "SENT_MESSAGES"):
             message = jsonpickle.loads(message)
@@ -1098,9 +1113,9 @@ def remove_inline_replies():
                 send_edited_message(message.text, message.id, reply_markup=None)
 
 
-def handle_community_request(call):
-    message_text = "Would you like to explore workouts created by the bodyweight fitness community?"
-    send_edited_message(message_text, call.message.id, reply_markup=explore_community_workouts_answer_markup())
+def ask_to_show_recommended_routines(call):
+    message_text = "Would you like to view the Recommended Routine?"
+    send_edited_message(message_text, call.message.id, reply_markup=view_recommended_routines_answer_markup())
 
 
 def publish_workout(call, workout_id, confirmed):
@@ -1153,23 +1168,32 @@ def get_saved_workout_from_user(workout_id):
                 return user.get("saved_workouts").get(workout_node)
 
 
-def handle_explore_community(call):
-    message_text = f"*Community*\n\nWhich type of community workouts would you like to browse?"
-    send_edited_message(
-        message_text,
-        call.message.id,
-        reply_markup=choose_community_workout_type_markup(),
-        parse_mode="MarkdownV2"
-    )
+def view_recommended_routines(call, difficulty=None):
+    if difficulty:
+        title = f"Recommended Routine ({difficulty.lower()})"
+        workout = get_recommended_routine_from_database(title)
+        workout_key = list(workout.keys())[0]
+        workout = workout.get(workout_key)
+        set_to_redis(UID, "RECOMMENDED_ROUTINE", workout)
+        show_recommended_routine_details(call, workout)
+    else:
+        send_edited_message(
+            "Which recommended routine progression would you like to view?",
+            call.message.id,
+            reply_markup=choose_recommended_routine_markup()
+        )
 
 
-def handle_show_recommended_routines(call):
-    message_text = f"*Recommended Routine*\n\nWhich progression do you want to look at?"
-    send_edited_message(
-        message_text,
-        call.message.id,
-        reply_markup=show_recommended_routine_progressions_markup(),
-        parse_mode="MarkdownV2")
+def add_recommended_routine(call, routine):
+    # check if user already has this workout in his saved workouts
+    if not get_saved_workout_from_user(routine.get("id")):
+        user = add_to_saved_workouts(UID, routine)
+        set_to_redis(UID, "USER", user)
+        message_text = f"Done\\! added *{prepare_for_markdown_v2(routine.get('title'))}* to your saved workouts\\."
+    else:
+        message_text = f"*{prepare_for_markdown_v2(routine.get('title'))}* is already in your saved workouts\\."
+
+    send_edited_message(message_text, call.message.id, parse_mode="MarkdownV2")
 
 
 def export(message):

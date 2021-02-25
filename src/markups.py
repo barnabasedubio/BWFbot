@@ -9,7 +9,7 @@ def start_options_markup():
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("💪 Start one of my workouts", callback_data="choose_workouts"))
     markup.add(InlineKeyboardButton("✳️ Create a new workout", callback_data="create_workout"))
-    markup.add(InlineKeyboardButton("👥 Explore community workouts", callback_data="explore_community"))
+    markup.add(InlineKeyboardButton("🔎 View recommended routines", callback_data="VIEW_RECOMMENDED_ROUTINES"))
     return markup
 
 
@@ -53,7 +53,7 @@ def create_workout_answer_markup():
     markup = InlineKeyboardMarkup()
     markup.add(
         InlineKeyboardButton("✅ Yes", callback_data="create_workout"),
-        InlineKeyboardButton("❌ No", callback_data="request_community"),
+        InlineKeyboardButton("❌ No", callback_data="ASK_TO_SHOW_RECOMMENDED_ROUTINES"),
     )
     return markup
 
@@ -76,15 +76,12 @@ def list_workouts_markup(workouts, comes_from=None):
     return markup
 
 
-def view_workout_details_markup(workouts, comes_from=None):
+def view_workout_details_markup(workouts):
     markup = InlineKeyboardMarkup()
     for node_id in workouts:
         workout = workouts[node_id]
         markup.add(InlineKeyboardButton(workout['title'], callback_data=f"VIEW_WORKOUT:{workout['id']}"))
-    if comes_from == "explore_community":
-        markup.add(InlineKeyboardButton("↩️ Go back", callback_data="explore_community"))
-    else:
-        markup.add(InlineKeyboardButton("↩️ Go back", callback_data="start_menu"))
+    markup.add(InlineKeyboardButton("↩️ Go back", callback_data="start_menu"))
     return markup
 
 
@@ -130,11 +127,29 @@ def delete_workout_confirmation_markup(workout_id):
     return markup
 
 
-def explore_community_workouts_answer_markup():
+def view_recommended_routines_answer_markup():
     markup = InlineKeyboardMarkup()
     markup.add(
-        InlineKeyboardButton("✅ Yes", callback_data="explore_community"),
+        InlineKeyboardButton("✅ Yes", callback_data="VIEW_RECOMMENDED_ROUTINES"),
         InlineKeyboardButton("❌ No", callback_data="start_menu"),
+    )
+    return markup
+
+
+def choose_recommended_routine_markup():
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("Beginner", callback_data="RECOMMENDED_ROUTINE:BEGINNER"))
+    markup.add(InlineKeyboardButton("Intermediate", callback_data="RECOMMENDED_ROUTINE:INTERMEDIATE"))
+    markup.add(InlineKeyboardButton("Advanced", callback_data="RECOMMENDED_ROUTINE:ADVANCED"))
+    markup.add(InlineKeyboardButton("↩️ Go back", callback_data="start_menu"))
+    return markup
+
+
+def add_recommended_routine_markup(workout_id):
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton("✅ Add", callback_data=f"ADD_RECOMMENDED_ROUTINE"),
+        InlineKeyboardButton("↩️ Go back", callback_data="VIEW_RECOMMENDED_ROUTINES")
     )
     return markup
 
@@ -196,18 +211,3 @@ def add_custom_exercise_go_back_markup():
     markup.add(InlineKeyboardButton("↩️ Go back", callback_data="show_add_exercise_options"))
     return markup
 
-
-def choose_community_workout_type_markup():
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Recommended Routine", callback_data="SHOW_RECOMMENDED_ROUTINES"))
-    markup.add(InlineKeyboardButton("↩️ Go back", callback_data="start_menu"))
-    return markup
-
-
-def show_recommended_routine_progressions_markup():
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Beginner", callback_data="RECOMMENDED_ROUTINE:BEGINNER"))
-    markup.add(InlineKeyboardButton("Intermediate", callback_data="RECOMMENDED_ROUTINE:INTERMEDIATE"))
-    markup.add(InlineKeyboardButton("Advanced", callback_data="RECOMMENDED_ROUTINE:ADVANCED"))
-    markup.add(InlineKeyboardButton("↩️ Go back", callback_data="explore_community"))
-    return markup
