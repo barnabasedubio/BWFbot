@@ -1,0 +1,6 @@
+pyTelegramBotAPI
+firebase-admin
+redis
+pyYaml
+aiohttp
+jsonpickle
