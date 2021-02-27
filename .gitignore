@@ -2,5 +2,6 @@ env
 local
 __pycache__
 .idea
+redis
 config.yml
 firebase_service_account_key_SECRET.json
