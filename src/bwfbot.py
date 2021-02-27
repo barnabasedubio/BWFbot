@@ -103,11 +103,13 @@ def set_user_id(bot_instance, message):
 
     # if the new message shares the same timestamp as the one currently saved in redis, it means that telegram
     # sent a batch of messages at once because the user had no internet when they sent them.
-    # in that case, only handle the first of these messages, and ignore the rest
-    if get_from_redis(UID, "LAST_MESSAGE_TIMESTAMP") and get_from_redis(UID, "LAST_MESSAGE_TIMESTAMP") == message.date:
-        message.text = ""
-    else:
-        set_to_redis(UID, "LAST_MESSAGE_TIMESTAMP", message.date)
+    # in that case, only handle the first of these messages, and ignore the rest.
+    # however, if the message is numeric, it is most likely a rep count, in which case we want to handle them all the time.
+    if not message.text.isnumeric():
+        if get_from_redis(UID, "LAST_MESSAGE_TIMESTAMP") and get_from_redis(UID, "LAST_MESSAGE_TIMESTAMP") == message.date:
+            message.text = ""
+        else:
+            set_to_redis(UID, "LAST_MESSAGE_TIMESTAMP", message.date)
 
 
 @BOT.callback_query_handler(func=lambda call: True)
@@ -1176,7 +1178,7 @@ def publish_workout(call, workout_id, confirmed):
 
             set_to_redis(UID, "USER", user)
             workout = get_saved_workout_from_user(workout_id)
-            # TODO: publish to DB function
+            # publish_to_DB() function only to be implemented if you have users interested in publishing their workouts.
 
             BOT.answer_callback_query(call.id)
             send_edited_message(
