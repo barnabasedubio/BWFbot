@@ -1226,7 +1226,7 @@ def add_recommended_routine(call, routine):
     if not get_saved_workout_from_user(routine.get("id")):
         user = add_to_saved_workouts(UID, routine)
         set_to_redis(UID, "USER", user)
-        message_text = f"Done\\! added *{prepare_for_markdown_v2(routine.get('title'))}* to your saved workouts\\."
+        message_text = f"Done\\! Added *{prepare_for_markdown_v2(routine.get('title'))}* to your saved workouts\\."
     else:
         message_text = f"*{prepare_for_markdown_v2(routine.get('title'))}* is already in your saved workouts\\."
 
