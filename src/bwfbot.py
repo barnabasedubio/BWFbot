@@ -28,7 +28,6 @@ apihelper.ENABLE_MIDDLEWARE = True
 
 TOKEN = config.get("telegram").get("token")
 BOT = telebot.TeleBot(TOKEN)
-
 """
 global variables stored in REDIS:
 session:
