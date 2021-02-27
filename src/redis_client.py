@@ -4,7 +4,7 @@ import redis
 import jsonpickle
 
 
-CONN = redis.Redis(host="192.168.0.31", decode_responses=True)
+CONN = redis.Redis(decode_responses=True)
 
 
 # --------- BASIC OPERATIONS ---------
