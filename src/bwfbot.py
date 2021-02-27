@@ -1113,7 +1113,6 @@ def show_recommended_routine_details(call, workout):
 def remove_inline_replies():
     global UID
     # since user interaction has proceeded, remove any previous inline reply markups.
-    # TODO: figure out why the reply markup gets removed as well
     if exists_in_redis(UID, "SENT_MESSAGES"):
         for message in get_from_redis(UID, "SENT_MESSAGES"):
             message = jsonpickle.loads(message)
