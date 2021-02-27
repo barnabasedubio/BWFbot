@@ -121,14 +121,20 @@ def handle_callback_query(call):
     global UID
     UID = str(call.from_user.id)
 
-    # if the new callback data is the same as the one stored in redis, it means that the user sent consecutive
+    # if the new callback data is the same as the one stored in redis (and the time is similar),
+    # it means that the user sent consecutive
     # callbacks for the same inline response while having no internet, and telegram sent all at once upon
-    # reconnection. Since consecutive callbacks are *never* the same, ignore the new one
-    if get_from_redis(UID, "LAST_CALLBACK_DATA") and get_from_redis(UID, "LAST_CALLBACK_DATA") == call.data:
-        print("same callback data")
+    # reconnection. Since the time is too close for them to be distinct, ignore all but the first callback
+    if get_from_redis(UID, "LAST_CALLBACK_DATA") \
+            and get_from_redis(UID, "LAST_CALLBACK_DATA") == call.data\
+            and get_from_redis(UID, "LAST_CALLBACK_DATA_TIMESTAMP") > int(time.time() - 2):
+        print("same callback data, same time")
         return
     else:
         set_to_redis(UID, "LAST_CALLBACK_DATA", call.data)
+        set_to_redis(UID, "LAST_CALLBACK_DATA_TIMESTAMP", int(time.time()))
+
+    # ---------------------------------------------------------------------------------------------------
 
     if call.data not in ("add_catalogue_exercise", "ADD_RECOMMENDED_ROUTINE") \
             and "CONFIRM_DELETE_WORKOUT:" not in call.data:
@@ -156,7 +162,7 @@ def handle_callback_query(call):
     elif call.data == "ASK_TO_SHOW_RECOMMENDED_ROUTINES":
         ask_to_show_recommended_routines(call)
 
-    elif call.data == "start_menu":
+    elif call.data.endswith("START_MENU"):
         show_start_options(call=call)
 
     elif call.data == "exercise_added":
@@ -489,7 +495,7 @@ def feature_in_progress(message):
     reset_state()
 
     send_message(
-        "🚧 Please bear with me, I am currently still working on this feature."
+        "🚧 Please be patient, I am currently still working on this feature."
         "\n\nIn the meantime, please send me some /feedback as to what you would like to see once it's done!")
 
     increment_in_redis("0000", f"{message.text[1:].upper()}_REQUESTED")
@@ -944,8 +950,8 @@ def do_workout(new_rep_entry=False, message=None, workout_id=None):
     :return:
     """
 
-    if not get_from_redis(UID, "WORKOUT"):
-        # only happens once (when the workout gets started initially)
+    if not get_from_redis(UID, "WORKOUT"):  # only happens once (when the workout gets started initially)
+        remove_inline_replies()
         new_workout = get_saved_workout_from_user(workout_id)
         # give the new workout a new id
         new_workout['id'] = str(uuid4())
@@ -1140,7 +1146,7 @@ def remove_inline_replies():
                 new_message = send_edited_message(message.text, message.id, reply_markup=None)
                 set_list_index_to_redis(UID, "SENT_MESSAGES", ix, jsonpickle.dumps(new_message))
 
-    delete_from_redis(UID, "SENT_MESSAGES")
+    # delete_from_redis(UID, "SENT_MESSAGES")
 
 
 def ask_to_show_recommended_routines(call):
@@ -1304,7 +1310,7 @@ def handle_user_feedback(message=None):
     if not message:
         send_message(
             "*Feedback*\n\nHere you can report issues you have encountered or let me know of any things you would "
-            "like me to include or improve upon\\.\n\nI'll read every single one\\.\n\n"
+            "like me to include or improve upon\\.\n\n"
             "I'm constantly aiming to improve the _myBWF_ Workout Assistant, "
             "so every bit of feedback is incredibly valuable\\.",
             parse_mode="MarkdownV2"
@@ -1326,4 +1332,4 @@ def handle_user_feedback(message=None):
         set_to_redis(UID, "USER", user)
 
 
-BOT.polling()
+BOT.polling(none_stop=True)

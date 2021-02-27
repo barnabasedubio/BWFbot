@@ -7,6 +7,6 @@ COPY ./src ./src
 COPY ./config.yml .
 COPY ./firebase_service_account_key_SECRET.json .
 
-WORKDIR ./src
+WORKDIR /root/src
 
 CMD ["python", "./bwfbot.py"]
