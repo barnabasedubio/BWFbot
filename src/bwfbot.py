@@ -101,6 +101,14 @@ def set_user_id(bot_instance, message):
     global UID
     UID = str(message.from_user.id)
 
+    # if the new message shares the same timestamp as the one currently saved in redis, it means that telegram
+    # sent a batch of messages at once because the user had no internet when they sent them.
+    # in that case, only handle the first of these messages, and ignore the rest
+    if get_from_redis(UID, "LAST_MESSAGE_TIMESTAMP") and get_from_redis(UID, "LAST_MESSAGE_TIMESTAMP") == message.date:
+        message.text = ""
+    else:
+        set_to_redis(UID, "LAST_MESSAGE_TIMESTAMP", message.date)
+
 
 @BOT.callback_query_handler(func=lambda call: True)
 def handle_callback_query(call):
@@ -110,6 +118,15 @@ def handle_callback_query(call):
     """
     global UID
     UID = str(call.from_user.id)
+
+    # if the new callback data is the same as the one stored in redis, it means that the user sent consecutive
+    # callbacks for the same inline response while having no internet, and telegram sent all at once upon
+    # reconnection. Since consecutive callbacks are *never* the same, ignore the new one
+    if get_from_redis(UID, "LAST_CALLBACK_DATA") and get_from_redis(UID, "LAST_CALLBACK_DATA") == call.data:
+        print("same callback data")
+        return
+    else:
+        set_to_redis(UID, "LAST_CALLBACK_DATA", call.data)
 
     if call.data not in ("add_catalogue_exercise", "ADD_RECOMMENDED_ROUTINE") \
             and "CONFIRM_DELETE_WORKOUT:" not in call.data:
@@ -612,6 +629,7 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
         parse_mode=parse_mode)
 
     set_list_index_to_redis(UID, "SENT_MESSAGES", message_index, jsonpickle.dumps(new_message))
+    return new_message
 
 
 def choose_workout(call=None, comes_from=None):
@@ -1114,10 +1132,11 @@ def remove_inline_replies():
     global UID
     # since user interaction has proceeded, remove any previous inline reply markups.
     if exists_in_redis(UID, "SENT_MESSAGES"):
-        for message in get_from_redis(UID, "SENT_MESSAGES"):
+        for ix, message in enumerate(get_from_redis(UID, "SENT_MESSAGES")):
             message = jsonpickle.loads(message)
             if type(message.reply_markup) is telebot.types.InlineKeyboardMarkup:
-                send_edited_message(message.text, message.id, reply_markup=None)
+                new_message = send_edited_message(message.text, message.id, reply_markup=None)
+                set_list_index_to_redis(UID, "SENT_MESSAGES", ix, jsonpickle.dumps(new_message))
 
     delete_from_redis(UID, "SENT_MESSAGES")
 
