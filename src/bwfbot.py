@@ -4,30 +4,40 @@ import json
 import time
 import datetime
 import telebot
+import ssl
 
 from telebot import apihelper
-from firebase_admin import \
-    credentials, \
-    initialize_app
-
+from firebase_admin import credentials, initialize_app
 from markups import *
 from database import *
 from redis_client import *
 from utils import *
-
 from uuid import uuid4
+from aiohttp import web
+
 
 # configuration
 with open("../config.yml", "r") as fp:
     config = yaml.load(fp, yaml.FullLoader)
+    API_TOKEN = config.get("telegram").get("token")
 
 CRED = credentials.Certificate("../firebase_service_account_key_SECRET.json")
 initialize_app(CRED, {"databaseURL": config.get("firebase").get("reference")})
 
 apihelper.ENABLE_MIDDLEWARE = True
 
-TOKEN = config.get("telegram").get("token")
-BOT = telebot.TeleBot(TOKEN)
+WEBHOOK_HOST = '164.90.172.233'
+WEBHOOK_PORT = 8443  # 443, 80, 88 or 8443 (port need to be 'open')
+WEBHOOK_LISTEN = '0.0.0.0'  # In some VPS you may need to put here the IP addr
+WEBHOOK_SSL_CERT = './webhook_cert.pem'  # Path to the ssl certificate
+WEBHOOK_SSL_PRIV = './webhook_pkey.pem'  # Path to the ssl private key
+WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}:{WEBHOOK_PORT}"
+WEBHOOK_URL_PATH = f"/{API_TOKEN}/"
+
+
+BOT = telebot.TeleBot(API_TOKEN)
+APP = web.Application()
+
 """
 global variables stored in REDIS:
 session:
@@ -91,6 +101,21 @@ def reset_state():
 
 
 global UID
+
+
+# ------------- PROCESS WEBHOOK CALLS ----------------
+
+async def handle(request):
+    if request.match_info.get("token") == BOT.token:
+        request_body_dict = await request.json()
+        update = telebot.types.Update.de_json(request_body_dict)
+        BOT.process_new_updates([update])
+        return web.Response()
+    else:
+        return web.Response(status=403)
+
+
+APP.router.add_post("/{token}/", handle)
 
 
 # ----------------- HANDLERS --------------------
@@ -1331,4 +1356,15 @@ def handle_user_feedback(message=None):
         set_to_redis(UID, "USER", user)
 
 
-BOT.polling(none_stop=True)
+# remove webhook (setting the webhook fails sometimes if there is a previous webhook)
+BOT.remove_webhook()
+
+# set webhook
+BOT.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH, certificate=open(WEBHOOK_SSL_CERT, "r"))
+
+# build ssl context
+CONTEXT = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+CONTEXT.load_cert_chain(WEBHOOK_SSL_CERT, WEBHOOK_SSL_PRIV)
+
+# start aiohttp server
+web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT, ssl_context=CONTEXT)
