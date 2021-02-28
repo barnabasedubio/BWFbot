@@ -27,13 +27,12 @@ initialize_app(CRED, {"databaseURL": config.get("firebase").get("reference")})
 
 apihelper.ENABLE_MIDDLEWARE = True
 
-WEBHOOK_HOST = "839a92e3de12.ngrok.io"
+WEBHOOK_HOST = "c6d763048b34.ngrok.io"
 WEBHOOK_PORT = 8443
 WEBHOOK_LISTEN = '127.0.0.1'  # In some VPS you may need to put here the IP addr
 WEBHOOK_SSL_CERT = '../ssl/webhook_cert.pem'  # Path to the ssl certificate
 WEBHOOK_SSL_PRIV = '../ssl/webhook_pkey.pem'  # Path to the ssl private key
-WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}:{WEBHOOK_PORT}"
-# WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}"
+WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}/"
 WEBHOOK_URL_PATH = f"/{API_TOKEN}/"
 
 
@@ -1359,15 +1358,22 @@ def handle_user_feedback(message=None):
         set_to_redis(UID, "USER", user)
 
 
-# remove webhook (setting the webhook fails sometimes if there is a previous webhook)
+# -------------------------- webhook configuration --------------------------------
+
+# remove previous webhook
 # BOT.remove_webhook()
 
-# set webhook
-# BOT.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH, certificate=open(WEBHOOK_SSL_CERT, "r"))
+certificate = None
+# certificate = open(WEBHOOK_SSL_CERT, "r")  # for prod
 
-# build ssl context
-# CONTEXT = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-# CONTEXT.load_cert_chain(WEBHOOK_SSL_CERT, WEBHOOK_SSL_PRIV)
-# start aiohttp server
+BOT.set_webhook(url=WEBHOOK_URL_BASE, certificate=certificate)
+
+
+# -------------------------- server configuration --------------------------------
+
+CONTEXT = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+CONTEXT.load_cert_chain(WEBHOOK_SSL_CERT, WEBHOOK_SSL_PRIV)
 # web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT, ssl_context=CONTEXT)
+
+# Since local server runs on http and not https, ssl context is not needed
 web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT)
