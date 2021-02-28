@@ -28,12 +28,12 @@ initialize_app(CRED, {"databaseURL": config.get("firebase").get("reference")})
 apihelper.ENABLE_MIDDLEWARE = True
 
 WEBHOOK_HOST = "c6d763048b34.ngrok.io"
+WEBHOOK_LISTEN = '0.0.0.0'  # In some VPS you may need to use the IP address instead
 WEBHOOK_PORT = 8443
-WEBHOOK_LISTEN = '127.0.0.1'  # In some VPS you may need to put here the IP addr
 WEBHOOK_SSL_CERT = '../ssl/webhook_cert.pem'  # Path to the ssl certificate
 WEBHOOK_SSL_PRIV = '../ssl/webhook_pkey.pem'  # Path to the ssl private key
 WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}/"
-WEBHOOK_URL_PATH = f"/{API_TOKEN}/"
+WEBHOOK_URL_PATH = f"{API_TOKEN}/"
 
 
 BOT = telebot.TeleBot(API_TOKEN)
@@ -107,17 +107,15 @@ global UID
 # ------------- PROCESS WEBHOOK CALLS ----------------
 
 async def handle(request):
-    # if request.match_info.get("token") == BOT.token:
-    request_body_dict = await request.json()
-    update = telebot.types.Update.de_json(request_body_dict)
-    BOT.process_new_updates([update])
-    return web.Response()
-    # else:
-        # return web.Response(status=403)
+    if request.match_info.get("token") == BOT.token:
+        request_body_dict = await request.json()
+        update = telebot.types.Update.de_json(request_body_dict)
+        BOT.process_new_updates([update])
+        return web.Response()
+    else:
+        return web.Response(status=403)
 
-
-# APP.router.add_post("/{token}/", handle)
-APP.router.add_post("/", handle)
+APP.router.add_post("/{token}/", handle)
 
 
 # ----------------- HANDLERS --------------------
@@ -1358,16 +1356,13 @@ def handle_user_feedback(message=None):
         set_to_redis(UID, "USER", user)
 
 
-# -------------------------- webhook configuration --------------------------------
-
-# remove previous webhook
-# BOT.remove_webhook()
+# -------------------------- webhook configuration -------------------------------
 
 certificate = None
 # certificate = open(WEBHOOK_SSL_CERT, "r")  # for prod
 
-BOT.set_webhook(url=WEBHOOK_URL_BASE, certificate=certificate)
-
+BOT.remove_webhook()
+BOT.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH, certificate=certificate)
 
 # -------------------------- server configuration --------------------------------
 
