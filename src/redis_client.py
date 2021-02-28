@@ -2,10 +2,16 @@
 
 import redis
 import jsonpickle
+import yaml
+
+
+with open("../config.yml", "r") as fp:
+    config = yaml.load(fp, yaml.FullLoader)
+    REDIS_PASS = config.get("redis").get("remote").get("password")
 
 # CONN = redis.Redis(decode_responses=True)  # local
 # CONN = redis.Redis(host="192.168.0.31", decode_responses=True)  # local (docker)
-CONN = redis.Redis("164.90.172.233", decode_responses=True)  # remote (docker)
+CONN = redis.Redis("164.90.172.233", password=REDIS_PASS, decode_responses=True)  # remote (docker)
 
 # --------- BASIC OPERATIONS ---------
 
