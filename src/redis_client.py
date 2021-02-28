@@ -4,7 +4,8 @@ import redis
 import jsonpickle
 
 
-CONN = redis.Redis("95.90.243.138", decode_responses=True)
+# since the redis container is listening on 0.0.0.0 this should work
+CONN = redis.Redis(decode_responses=True)
 
 
 # --------- BASIC OPERATIONS ---------

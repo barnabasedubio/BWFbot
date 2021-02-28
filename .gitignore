@@ -3,5 +3,6 @@ local
 __pycache__
 .idea
 redis
+ngrok
 config.yml
 firebase_service_account_key.json

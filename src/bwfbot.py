@@ -27,12 +27,13 @@ initialize_app(CRED, {"databaseURL": config.get("firebase").get("reference")})
 
 apihelper.ENABLE_MIDDLEWARE = True
 
-WEBHOOK_HOST = "95.90.243.138"
+WEBHOOK_HOST = "839a92e3de12.ngrok.io"
 WEBHOOK_PORT = 8443
-WEBHOOK_LISTEN = '0.0.0.0'  # In some VPS you may need to put here the IP addr
+WEBHOOK_LISTEN = '127.0.0.1'  # In some VPS you may need to put here the IP addr
 WEBHOOK_SSL_CERT = '../ssl/webhook_cert.pem'  # Path to the ssl certificate
 WEBHOOK_SSL_PRIV = '../ssl/webhook_pkey.pem'  # Path to the ssl private key
 WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}:{WEBHOOK_PORT}"
+# WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}"
 WEBHOOK_URL_PATH = f"/{API_TOKEN}/"
 
 
@@ -107,16 +108,17 @@ global UID
 # ------------- PROCESS WEBHOOK CALLS ----------------
 
 async def handle(request):
-    if request.match_info.get("token") == BOT.token:
-        request_body_dict = await request.json()
-        update = telebot.types.Update.de_json(request_body_dict)
-        BOT.process_new_updates([update])
-        return web.Response()
-    else:
-        return web.Response(status=403)
+    # if request.match_info.get("token") == BOT.token:
+    request_body_dict = await request.json()
+    update = telebot.types.Update.de_json(request_body_dict)
+    BOT.process_new_updates([update])
+    return web.Response()
+    # else:
+        # return web.Response(status=403)
 
 
-APP.router.add_post("/{token}/", handle)
+# APP.router.add_post("/{token}/", handle)
+APP.router.add_post("/", handle)
 
 
 # ----------------- HANDLERS --------------------
@@ -1358,14 +1360,14 @@ def handle_user_feedback(message=None):
 
 
 # remove webhook (setting the webhook fails sometimes if there is a previous webhook)
-BOT.remove_webhook()
+# BOT.remove_webhook()
 
 # set webhook
-BOT.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH, certificate=open(WEBHOOK_SSL_CERT, "r"))
+# BOT.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH, certificate=open(WEBHOOK_SSL_CERT, "r"))
 
 # build ssl context
-CONTEXT = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-CONTEXT.load_cert_chain(WEBHOOK_SSL_CERT, WEBHOOK_SSL_PRIV)
-
+# CONTEXT = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+# CONTEXT.load_cert_chain(WEBHOOK_SSL_CERT, WEBHOOK_SSL_PRIV)
 # start aiohttp server
-web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT, ssl_context=CONTEXT)
+# web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT, ssl_context=CONTEXT)
+web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT)
