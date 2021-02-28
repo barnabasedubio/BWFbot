@@ -3,13 +3,12 @@
 import redis
 import jsonpickle
 
-
-# since the redis container is listening on 0.0.0.0 this should work
-# CONN = redis.Redis(decode_responses=True)
-CONN = redis.Redis(host="192.168.0.31", decode_responses=True)
-
+# CONN = redis.Redis(decode_responses=True)  # local
+# CONN = redis.Redis(host="192.168.0.31", decode_responses=True)  # local (docker)
+CONN = redis.Redis("164.90.172.233", decode_responses=True)  # remote (docker)
 
 # --------- BASIC OPERATIONS ---------
+
 
 def exists_in_redis(uid, key):
     key = f"{uid}_{key}"

@@ -27,13 +27,24 @@ initialize_app(CRED, {"databaseURL": config.get("firebase").get("reference")})
 
 apihelper.ENABLE_MIDDLEWARE = True
 
+""" local development:
 WEBHOOK_HOST = "cfa34f1a1d55.ngrok.io"
-WEBHOOK_LISTEN = '0.0.0.0'  # In some VPS you may need to use the IP address instead
+WEBHOOK_LISTEN = '0.0.0.0'
 WEBHOOK_PORT = 8443
-WEBHOOK_SSL_CERT = '../ssl/webhook_cert.pem'  # Path to the ssl certificate
-WEBHOOK_SSL_PRIV = '../ssl/webhook_pkey.pem'  # Path to the ssl private key
 WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}/"
 WEBHOOK_URL_PATH = f"{API_TOKEN}/"
+"""
+
+""" remote deploy (DigitalOcean)
+"""
+WEBHOOK_HOST = "164.90.172.233"
+WEBHOOK_LISTEN = '0.0.0.0'
+WEBHOOK_PORT = 8443
+WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}:{WEBHOOK_PORT}/"
+WEBHOOK_URL_PATH = f"{API_TOKEN}/"
+
+WEBHOOK_SSL_CERT = '../ssl/webhook_cert.pem'
+WEBHOOK_SSL_PRIV = '../ssl/webhook_pkey.pem'
 
 
 BOT = telebot.TeleBot(API_TOKEN)
@@ -97,7 +108,7 @@ def reset_state():
         "RESET_STATE",
         "CURRENT_EXERCISE_INDEX",
         "PUBLISH_WORKOUT_ID",
-        "RECOMMENDED_ROUTINE"
+        "RECOMMENDED_ROUTINE",
     )
 
 
@@ -110,6 +121,22 @@ async def handle(request):
     if request.match_info.get("token") == BOT.token:
         request_body_dict = await request.json()
         update = telebot.types.Update.de_json(request_body_dict)
+
+        # if the update id already exists in redis, ignore this request
+        if update.message:
+            last_update_id = get_from_redis(update.message.from_user.id, "LAST_UPDATE_ID")
+            if last_update_id and last_update_id == update.update_id:
+                return web.Response(status=403)
+            else:
+                set_to_redis(update.message.from_user.id, "LAST_UPDATE_ID", update.update_id)
+
+        elif update.callback_query:
+            last_update_id = get_from_redis(update.callback_query.from_user.id, "LAST_UPDATE_ID")
+            if last_update_id and last_update_id == update.callback_query.id:
+                return web.Response(status=403)
+            else:
+                set_to_redis(update.callback_query.from_user.id, "LAST_UPDATE_ID", update.update_id)
+
         BOT.process_new_updates([update])
         return web.Response()
     else:
@@ -152,7 +179,6 @@ def handle_callback_query(call):
     if get_from_redis(UID, "LAST_CALLBACK_DATA") \
             and get_from_redis(UID, "LAST_CALLBACK_DATA") == call.data\
             and get_from_redis(UID, "LAST_CALLBACK_DATA_TIMESTAMP") > int(time.time() - 2):
-        print("same callback data, same time")
         return
     else:
         set_to_redis(UID, "LAST_CALLBACK_DATA", call.data)
@@ -1170,7 +1196,7 @@ def remove_inline_replies():
                 new_message = send_edited_message(message.text, message.id, reply_markup=None)
                 set_list_index_to_redis(UID, "SENT_MESSAGES", ix, jsonpickle.dumps(new_message))
 
-    # delete_from_redis(UID, "SENT_MESSAGES")
+    delete_from_redis(UID, "SENT_MESSAGES")
 
 
 def ask_to_show_recommended_routines(call):
@@ -1358,8 +1384,8 @@ def handle_user_feedback(message=None):
 
 # -------------------------- webhook configuration -------------------------------
 
-certificate = None
-# certificate = open(WEBHOOK_SSL_CERT, "r")  # for prod
+# certificate = None
+certificate = open(WEBHOOK_SSL_CERT, "r")  # for prod
 
 BOT.remove_webhook()
 BOT.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH, certificate=certificate)
@@ -1368,7 +1394,6 @@ BOT.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH, certificate=certificate
 
 CONTEXT = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
 CONTEXT.load_cert_chain(WEBHOOK_SSL_CERT, WEBHOOK_SSL_PRIV)
-# web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT, ssl_context=CONTEXT)
 
-# Since local server runs on http and not https, ssl context is not needed
-web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT)
+# web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT)  # local
+web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT, ssl_context=CONTEXT)  # remote
