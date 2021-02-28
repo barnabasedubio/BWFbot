@@ -27,7 +27,7 @@ initialize_app(CRED, {"databaseURL": config.get("firebase").get("reference")})
 
 apihelper.ENABLE_MIDDLEWARE = True
 
-WEBHOOK_HOST = "c6d763048b34.ngrok.io"
+WEBHOOK_HOST = "cfa34f1a1d55.ngrok.io"
 WEBHOOK_LISTEN = '0.0.0.0'  # In some VPS you may need to use the IP address instead
 WEBHOOK_PORT = 8443
 WEBHOOK_SSL_CERT = '../ssl/webhook_cert.pem'  # Path to the ssl certificate

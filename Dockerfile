@@ -10,11 +10,12 @@ RUN pip3 install \
     redis \
     aiohttp
 
-# RUN mkdir /root/mybwf/ssl
-
+RUN mkdir /root/mybwf && mkdir /root/mybwf/ssl
+WORKDIR /root/mybwf/ssl
+COPY ./ssl/* .
+WORKDIR /root/mybwf
 COPY ./src ./src
 COPY ./config.yml .
 COPY ./firebase_service_account_key.json .
 
-# WORKDIR /root/src
-# CMD ["python", "./bwfbot.py"]
+CMD ["python", "./bwfbot.py"]
