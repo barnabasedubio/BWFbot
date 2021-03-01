@@ -6,3 +6,52 @@ How I created a semi-scalable, stateful, telegram bot application
 
 question: How can I build a fitness tracking application on telegram that can handle a bunch of users?
 solution: by creating my own state and state management system
+
+
+
+
+---- launch update -----
+15:30 - 0 signups (except for me, duh)
+
+just launched mybwf 1 hour ago. already 13 users. I feel great but holy shit im scared wtf
+being exposed to the public and finally "launching" feels surreal
+but the response has been great so far! Amazing community
+
+Always when I get a new message on reddit i'm scared that something might not be working
+
+17:00 - 21 signups
+17:15 - 27 signups
+17:30 - 33 signups
+17:50 - 50 signups, bot has stopped responding and idk why fuck my life
+17:53 - it works again. I think the issue is that if one user has slow internet, everybody else has to wait for that
+
+18:05 - not responding again fuuuck
+
+18:07 - 57 signups, still no response locally
+next time set up real time logging
+its gonna be a long night...
+
+18:30 - inbound bandwidth is throught the roof, i need to somehow clear the message queue on the webhook endpoint, aiohttp cant handle so much
+is my guess rn
+19:13 - added print statements, rebuilt and relaunched container, works for me now. Docker is a fucking godsend
+19:13 - 103 signups
+19:30 - 112 signups
+
+the app is so incredibly buggy its ridiculous. I just got the confirmation for the creation of SOME BODY ELSES workout. Luckily it was just a message
+and not an actual DB call. the person should have gotten their workout just fine (i hope)
+adding exercises doesnt seem to work, and every message after then is read as a callback message
+
+20:00 - 130 signups
+Note to self: There are some bugs that can only reveal themselves if you have concurrent usage of your application.
+
+20:10 - UID bug: due to async it's possible that I set the UID for user a, and while handling request for user a
+set the UID for user b before the user a handle is complete, which causes the bot to send the message / data to another user. this is not good. at all.
+
+20:40 - 146 signups
+I am going to work on a change that sets the UID to be local all the time. Thing is, I won't be able to test it right now. It's goin straight to prod
+I know what youre thinking, but my foot has been shot open at this point. another bullet wont do too much anyway
+
+
+feedback:
+/u/AlonsoPinheiro - asked about customizing workouts once they have been created, custom exercises listed twice
+/u/bioonix - gsheets integration
