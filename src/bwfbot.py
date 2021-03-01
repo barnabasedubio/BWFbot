@@ -150,7 +150,7 @@ def set_user_id(bot_instance, message):
     # sent a batch of messages at once because the user had no internet when they sent them.
     # in that case, only handle the first of these messages, and ignore the rest.
     # however, if the message is numeric, it is most likely a rep count, in which case we want to handle them all the time.
-    if not message.text.isnumeric():
+    if message.text and not message.text.isnumeric():
         if get_from_redis(UID, "LAST_MESSAGE_TIMESTAMP") and get_from_redis(UID, "LAST_MESSAGE_TIMESTAMP") == message.date:
             message.text = ""
         else:
