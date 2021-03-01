@@ -118,24 +118,18 @@ global UID
 # ------------- PROCESS WEBHOOK CALLS ----------------
 
 async def handle(request):
+    print(request)
     if request.match_info.get("token") == BOT.token:
         request_body_dict = await request.json()
         update = telebot.types.Update.de_json(request_body_dict)
 
-        # if the update id already exists in redis, ignore this request
         if update.message:
-            last_update_id = get_from_redis(update.message.from_user.id, "LAST_UPDATE_ID")
-            if last_update_id and last_update_id == update.update_id:
-                return web.Response(status=403)
-            else:
-                set_to_redis(update.message.from_user.id, "LAST_UPDATE_ID", update.update_id)
+            print(update.update_id, update.message.from_user.id, update.message.text)
+            # TODO: ignore updates with the same update id
 
         elif update.callback_query:
-            last_update_id = get_from_redis(update.callback_query.from_user.id, "LAST_UPDATE_ID")
-            if last_update_id and last_update_id == update.callback_query.id:
-                return web.Response(status=403)
-            else:
-                set_to_redis(update.callback_query.from_user.id, "LAST_UPDATE_ID", update.update_id)
+            print(update.update_id, update.callback_query.from_user.id, "callback")
+            # TODO: ignore updates with the same update id
 
         BOT.process_new_updates([update])
         return web.Response()
@@ -648,6 +642,7 @@ def show_start_options(call=None, username="username"):
 
 
 def send_message(message_text, reply_markup=None, parse_mode=""):
+    print("sending message")
     global BOT, UID
 
     chat_id = get_from_redis(UID, "CHAT_ID")
@@ -658,11 +653,12 @@ def send_message(message_text, reply_markup=None, parse_mode=""):
         parse_mode=parse_mode)
 
     push_to_redis(UID, "SENT_MESSAGES", jsonpickle.dumps(sent_message))
+    print("sent message")
 
 
 def send_edited_message(message_text, previous_message_id, reply_markup=None, parse_mode=""):
     global BOT, UID
-
+    print("sending edited message")
     message_to_edit = None
     message_index = None
     chat_id = get_from_redis(UID, "CHAT_ID")
@@ -687,6 +683,7 @@ def send_edited_message(message_text, previous_message_id, reply_markup=None, pa
         parse_mode=parse_mode)
 
     set_list_index_to_redis(UID, "SENT_MESSAGES", message_index, jsonpickle.dumps(new_message))
+    print("sent edited message")
     return new_message
 
 
@@ -1193,6 +1190,7 @@ def remove_inline_replies():
         for ix, message in enumerate(get_from_redis(UID, "SENT_MESSAGES")):
             message = jsonpickle.loads(message)
             if type(message.reply_markup) is telebot.types.InlineKeyboardMarkup:
+                # TODO: if message doesnt exist anymore in telegram, handle for that
                 new_message = send_edited_message(message.text, message.id, reply_markup=None)
                 set_list_index_to_redis(UID, "SENT_MESSAGES", ix, jsonpickle.dumps(new_message))
 
@@ -1396,4 +1394,5 @@ CONTEXT = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
 CONTEXT.load_cert_chain(WEBHOOK_SSL_CERT, WEBHOOK_SSL_PRIV)
 
 # web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT)  # local
+print("running...")
 web.run_app(APP, host=WEBHOOK_LISTEN, port=WEBHOOK_PORT, ssl_context=CONTEXT)  # remote
