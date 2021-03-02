@@ -159,6 +159,7 @@ def show_maintenance_info(user_id):
         "Hey I'm currently fixing some internal issues. Would you mind coming back a bit later? Thanks a lot 😊")
 
 
+"""
 @BOT.message_handler(commands=["start, begin, create, delete, view, stats, publish, export"])
 def commands_handler(message):
     show_maintenance_info(message.from_user.id)
@@ -167,6 +168,7 @@ def commands_handler(message):
 @BOT.message_handler(func=lambda message: message.text)
 def input_handler(message):
     show_maintenance_info(message.from_user.id)
+"""
 
 
 @BOT.callback_query_handler(func=lambda call: True)
