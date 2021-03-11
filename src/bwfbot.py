@@ -113,7 +113,7 @@ def reset_state(user_id):
 # ------------- PROCESS WEBHOOK CALLS ----------------
 
 async def handle(request):
-    print(request)
+    print("--------------- new request ---------------")
     if request.match_info.get("token") == BOT.token:
         request_body_dict = await request.json()
         update = telebot.types.Update.de_json(request_body_dict)
@@ -652,7 +652,8 @@ def handle_user_input(message):
             if message.text.isnumeric():
                 do_workout(user_id, new_rep_entry=True, message=message)
         elif get_from_redis(user_id, "WAITING_FOR_USER_FEEDBACK"):
-            handle_user_feedback(message)
+            print("received feedback from user. saving to database...")
+            handle_user_feedback(message.from_user.id, message)
 
 
 # ----------------- FUNCTIONS ------------------
@@ -1174,6 +1175,7 @@ def show_exercise_stats(call):
 
 def workout_completed(user_id):
 
+    remove_inline_replies(user_id)
     send_message(user_id, "Great job 💫 You're done!")
 
     # send workout report
@@ -1247,7 +1249,7 @@ def show_recommended_routine_details(call, workout):
 
 
 def remove_inline_replies(user_id):
-
+    print("removing inline replies")
     # since user interaction has proceeded, remove any previous inline reply markups.
     if exists_in_redis(user_id, "SENT_MESSAGES"):
         for ix, message in enumerate(get_from_redis(user_id, "SENT_MESSAGES")):
@@ -1424,6 +1426,7 @@ def export(message):
 
 def handle_user_feedback(user_id, message=None):
     if not message:
+        print("waiting for user to write feedback...")
         send_message(
             user_id,
             "*Feedback*\n\nHere you can report issues you have encountered or let me know of any things you would "
@@ -1436,11 +1439,13 @@ def handle_user_feedback(user_id, message=None):
         set_to_redis(user_id, "WAITING_FOR_USER_FEEDBACK", True)
     else:
         # received message. post it to feedback node in firebase
+        print("adding feedback to database")
         feedback_object = {
             'user_id': message.from_user.id,
             'feedback_text': message.text
         }
         add_feedback_to_database(feedback_object)
+        print("added feedback to database.")
 
         send_message(user_id, "Thanks a lot for your feedback! 😊")
         delete_from_redis(user_id, "WAITING_FOR_INPUT", "WAITING_FOR_USER_FEEDBACK")
