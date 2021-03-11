@@ -1198,6 +1198,7 @@ def workout_completed(user_id):
 
     # number pad custom keyboard is not needed anymore
     send_message(user_id, report, reply_markup=telebot.types.ReplyKeyboardRemove(), parse_mode="MarkdownV2")
+    reset_state(user_id)
 
 
 def delete_workout(call, workout_id):
