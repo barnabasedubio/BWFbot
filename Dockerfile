@@ -10,7 +10,7 @@ RUN pip3 install \
     redis \
     aiohttp
 
-RUN echo "refresh0"
+RUN echo "bust cache"
 
 RUN mkdir /root/mybwf && mkdir /root/mybwf/ssl
 WORKDIR /root/mybwf/ssl
