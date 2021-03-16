@@ -706,24 +706,23 @@ def send_edited_message(user_id, message_text, previous_message_id, reply_markup
             message_index = ix
             break
 
-    new_message = BOT.edit_message_text(
-        message_text,
-        chat_id,
-        message_to_edit.id,
-        reply_markup=reply_markup,
-        disable_web_page_preview=True,
-        parse_mode=parse_mode)
+    try:
+        new_message = BOT.edit_message_text(
+            message_text,
+            chat_id,
+            message_to_edit.id,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+            parse_mode=parse_mode)
 
-    if not new_message:
-        send_message(user_id, "Whoops I think I messed up 🙈. You can reset me by clearing the history and pressing start again."
-                     "(Don't worry. All your data is still safe 😉)")
-        print("sent error message")
-        delete_from_redis(user_id, "SENT_MESSAGES")
-
-    else:
         set_list_index_to_redis(user_id, "SENT_MESSAGES", message_index, jsonpickle.dumps(new_message))
         print("sent edited message")
         return new_message
+
+    except Exception as e:
+        print("telegram sent exception. Deleting user's sent messages...")
+        delete_from_redis(user_id, "SENT_MESSAGES")
+        return
 
 
 def choose_workout(user_id, call=None, comes_from=None):
