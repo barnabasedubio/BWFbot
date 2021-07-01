@@ -273,6 +273,9 @@ def handle_callback_query(call):
 
         if temp_workout.get('exercises'):
             send_edited_message(user_id, "Let's go! 💪", call.message.id)
+            # in case user selected create new workout, only to go back and start an already existing workout
+            # discard waiting for workout title flag and start with the workout.
+            delete_from_redis(user_id, "WAITING_FOR_WORKOUT_TITLE")
             do_workout(user_id, workout_id=workout_id)
         else:
             send_edited_message(
