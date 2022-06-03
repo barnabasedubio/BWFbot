@@ -25,19 +25,10 @@ initialize_app(CRED, {"databaseURL": config.get("firebase").get("reference")})
 
 apihelper.ENABLE_MIDDLEWARE = True
 
-""" local development:
-WEBHOOK_HOST = "cfa34f1a1d55.ngrok.io"
-WEBHOOK_LISTEN = '0.0.0.0'
-WEBHOOK_PORT = 8443
-WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}/"
-WEBHOOK_URL_PATH = f"{API_TOKEN}/"
-"""
-
-""" remote deploy (DigitalOcean)
-"""
-WEBHOOK_HOST = "164.90.172.233"
-WEBHOOK_LISTEN = '0.0.0.0'
-WEBHOOK_PORT = 8443
+# remote deploy (DigitalOcean)
+WEBHOOK_HOST = config.get("droplet").get("production").get("ip")
+WEBHOOK_LISTEN = config.get("droplet").get("production").get("webhook_listen")
+WEBHOOK_PORT = config.get("droplet").get("production").get("webhook_port")
 WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}:{WEBHOOK_PORT}/"
 WEBHOOK_URL_PATH = f"{API_TOKEN}/"
 
