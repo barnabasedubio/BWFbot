@@ -3,5 +3,8 @@ local
 __pycache__
 .idea
 redis
+ngrok
+ssl
+*.tar
 config.yml
-firebase_service_account_key_SECRET.json
+firebase_service_account_key.json

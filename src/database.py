@@ -1,3 +1,5 @@
+import time
+
 from firebase_admin import \
     auth as AUTH, \
     db as DB
@@ -41,7 +43,8 @@ def add_user_to_database(user_id, first_name, last_name, username):
         "id": user_id,
         "username": username,
         "first_name": first_name,
-        "last_name": last_name
+        "last_name": last_name,
+        "joined_at": int(time.time())
     })
     # return created user
     return get_user_from_database(user_id)
